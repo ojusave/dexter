@@ -7,9 +7,31 @@ services:
     envVars:
       - key: PORT
         value: "3100"
+      # LLM Providers (at least one required)
       - key: OPENAI_API_KEY
         value: CHANGE_ME
+      - key: ANTHROPIC_API_KEY
+        value: CHANGE_ME
+      - key: GOOGLE_API_KEY
+        value: CHANGE_ME
+      - key: XAI_API_KEY
+        value: CHANGE_ME
+      - key: OPENROUTER_API_KEY
+        value: CHANGE_ME
+      # Financial Data (required)
       - key: FINANCIAL_DATASETS_API_KEY
         value: CHANGE_ME
+      # Web Search (at least one recommended)
       - key: EXASEARCH_API_KEY
         value: CHANGE_ME
+      - key: TAVILY_API_KEY
+        value: CHANGE_ME
+      # LangSmith (optional, for tracking/debugging)
+      - key: LANGSMITH_API_KEY
+        value: CHANGE_ME
+      - key: LANGSMITH_ENDPOINT
+        value: https://api.smith.langchain.com
+      - key: LANGSMITH_PROJECT
+        value: dexter
+      - key: LANGSMITH_TRACING
+        value: "true"
