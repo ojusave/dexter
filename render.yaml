@@ -7,6 +7,8 @@ services:
     envVars:
       - key: PORT
         value: "3100"
+      - key: DEXTER_MODEL
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
