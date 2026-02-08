@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: dexter
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "3100"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: FINANCIAL_DATASETS_API_KEY
+        sync: false
+      - key: EXASEARCH_API_KEY
+        sync: false
