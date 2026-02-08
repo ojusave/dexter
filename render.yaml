@@ -7,10 +7,27 @@ services:
     envVars:
       - key: PORT
         value: "3100"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: XAI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: FINANCIAL_DATASETS_API_KEY
+        sync: false
+      - key: EXASEARCH_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: LANGSMITH_API_KEY
+        sync: false
       - key: LANGSMITH_ENDPOINT
         value: https://api.smith.langchain.com
       - key: LANGSMITH_PROJECT
         value: dexter
       - key: LANGSMITH_TRACING
         value: "true"
-      - fromGroup: dexter-keys
