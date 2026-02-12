@@ -108,6 +108,24 @@ const MODEL_FACTORIES: Record<string, ModelFactory> = {
         baseURL: 'https://api.deepseek.com',
       },
     }),
+  mistral: (name, opts) =>
+    new ChatOpenAI({
+      model: name,
+      ...opts,
+      apiKey: getApiKey('MISTRAL_API_KEY'),
+      configuration: {
+        baseURL: 'https://api.mistral.ai/v1',
+      },
+    }),
+  cerebras: (name, opts) =>
+    new ChatOpenAI({
+      model: name.replace(/^cerebras:/, ''),
+      ...opts,
+      apiKey: getApiKey('CEREBRAS_API_KEY'),
+      configuration: {
+        baseURL: 'https://api.cerebras.ai/v1',
+      },
+    }),
   ollama: (name, opts) =>
     new ChatOllama({
       model: name.replace(/^ollama:/, ''),

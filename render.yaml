@@ -21,6 +21,10 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
       - key: FINANCIAL_DATASETS_API_KEY
         sync: false
       - key: EXASEARCH_API_KEY

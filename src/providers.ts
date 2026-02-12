@@ -60,6 +60,20 @@ export const PROVIDERS: ProviderDef[] = [
     fastModel: 'deepseek-chat',
   },
   {
+    id: 'mistral',
+    displayName: 'Mistral',
+    modelPrefix: 'mistral-',
+    apiKeyEnvVar: 'MISTRAL_API_KEY',
+    fastModel: 'mistral-small-latest',
+  },
+  {
+    id: 'cerebras',
+    displayName: 'Cerebras',
+    modelPrefix: 'cerebras:',
+    apiKeyEnvVar: 'CEREBRAS_API_KEY',
+    fastModel: 'cerebras:llama-3.3-70b',
+  },
+  {
     id: 'openrouter',
     displayName: 'OpenRouter',
     modelPrefix: 'openrouter:',
