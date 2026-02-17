@@ -8,8 +8,10 @@ services:
       - key: PORT
         value: "3100"
       - key: DEXTER_MODEL
-        sync: false
+        value: groq:meta-llama/llama-4-scout-17b-16e-instruct
       - key: DEXTER_FALLBACK_MODELS
+        value: cerebras:gpt-oss-120b,gpt-5-mini
+      - key: GROQ_API_KEY
         sync: false
       - key: OPENAI_API_KEY
         sync: false
