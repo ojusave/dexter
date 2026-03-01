@@ -36,7 +36,7 @@ async function runAgent(
   iterations: number;
   totalTime: number;
 }> {
-  const agent = Agent.create({ model, maxIterations });
+  const agent = await Agent.create({ model, maxIterations });
 
   let answer = '';
   const toolCalls: Array<{ tool: string; args: Record<string, unknown>; duration?: number }> = [];
