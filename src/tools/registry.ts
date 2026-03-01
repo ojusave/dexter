@@ -3,7 +3,6 @@ import { createFinancialSearch, createFinancialMetrics, createReadFilings } from
 import { exaSearch, perplexitySearch, tavilySearch, WEB_SEARCH_DESCRIPTION } from './search/index.js';
 import { skillTool, SKILL_TOOL_DESCRIPTION } from './skill.js';
 import { webFetchTool, WEB_FETCH_DESCRIPTION } from './fetch/web-fetch.js';
-import { browserTool, BROWSER_DESCRIPTION } from './browser/browser.js';
 import { readFileTool, READ_FILE_DESCRIPTION } from './filesystem/read-file.js';
 import { writeFileTool, WRITE_FILE_DESCRIPTION } from './filesystem/write-file.js';
 import { editFileTool, EDIT_FILE_DESCRIPTION } from './filesystem/edit-file.js';
@@ -11,6 +10,16 @@ import { FINANCIAL_SEARCH_DESCRIPTION } from './finance/financial-search.js';
 import { FINANCIAL_METRICS_DESCRIPTION } from './finance/financial-metrics.js';
 import { READ_FILINGS_DESCRIPTION } from './finance/read-filings.js';
 import { discoverSkills } from '../skills/index.js';
+
+let browserTool: StructuredToolInterface | null = null;
+let BROWSER_DESCRIPTION = '';
+try {
+  const mod = await import('./browser/browser.js');
+  browserTool = mod.browserTool;
+  BROWSER_DESCRIPTION = mod.BROWSER_DESCRIPTION;
+} catch {
+  // Playwright not available (e.g., Docker without browser binaries) — skip browser tool
+}
 
 /**
  * A registered tool with its rich description for system prompt injection.
@@ -54,11 +63,6 @@ export function getToolRegistry(model: string): RegisteredTool[] {
       description: WEB_FETCH_DESCRIPTION,
     },
     {
-      name: 'browser',
-      tool: browserTool,
-      description: BROWSER_DESCRIPTION,
-    },
-    {
       name: 'read_file',
       tool: readFileTool,
       description: READ_FILE_DESCRIPTION,
@@ -74,6 +78,14 @@ export function getToolRegistry(model: string): RegisteredTool[] {
       description: EDIT_FILE_DESCRIPTION,
     },
   ];
+
+  if (browserTool) {
+    tools.push({
+      name: 'browser',
+      tool: browserTool,
+      description: BROWSER_DESCRIPTION,
+    });
+  }
 
   // Include web_search if Exa, Perplexity, or Tavily API key is configured (Exa → Perplexity → Tavily)
   if (process.env.EXASEARCH_API_KEY) {

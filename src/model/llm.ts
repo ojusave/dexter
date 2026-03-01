@@ -132,6 +132,15 @@ const MODEL_FACTORIES: Record<string, ModelFactory> = {
         baseURL: 'https://api.mistral.ai/v1',
       },
     }),
+  groq: (name, opts) =>
+    new ChatOpenAI({
+      model: name.replace(/^groq:/, ''),
+      ...opts,
+      apiKey: getApiKey('GROQ_API_KEY'),
+      configuration: {
+        baseURL: 'https://api.groq.com/openai/v1',
+      },
+    }),
   cerebras: (name, opts) =>
     new ChatOpenAI({
       model: name.replace(/^cerebras:/, ''),

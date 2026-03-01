@@ -1,4 +1,4 @@
-FROM oven/bun:1 AS base
+FROM oven/bun:1.3.6 AS base
 WORKDIR /app
 
 # Install dependencies (skip playwright chromium download — not needed for API server)
