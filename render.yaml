@@ -10,7 +10,7 @@ services:
       - key: DEXTER_MODEL
         value: groq:meta-llama/llama-4-scout-17b-16e-instruct
       - key: DEXTER_FALLBACK_MODELS
-        value: cerebras:gpt-oss-120b,gpt-5-mini
+        value: cerebras:gpt-oss-120b,openrouter:google/gemini-3-flash-preview,gpt-5-mini
       - key: GROQ_API_KEY
         sync: false
       - key: OPENAI_API_KEY
