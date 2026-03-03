@@ -20,25 +20,33 @@ export const DEFAULT_MODEL = 'gpt-5.2';
 
 /**
  * Fallback chain for when primary provider has billing/quota issues.
- * Order matters: tries each in sequence until one works.
+ * Order: FREE/CHEAP models first → paid as last resort
  * Only includes providers with API keys configured.
  */
 function getAvailableFallbackModels(): string[] {
   const fallbacks: string[] = [];
   
-  // Priority order for fallbacks (paid tiers first, then free)
+  // Priority order: FREE → CHEAP → EXPENSIVE
+  // This ensures we save credits wherever possible
   const fallbackOrder = [
-    { envVar: 'ANTHROPIC_API_KEY', model: 'claude-sonnet-4-20250514' },
+    // FREE tier models first
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct:free' },
+    { envVar: 'GROQ_API_KEY', model: 'groq:llama-3.3-70b-versatile' },  // Free tier
+    { envVar: 'DEEPSEEK_API_KEY', model: 'deepseek-chat' },  // Very cheap
+    // CHEAP paid models
     { envVar: 'GOOGLE_API_KEY', model: 'gemini-2.5-flash-preview-05-20' },
-    { envVar: 'DEEPSEEK_API_KEY', model: 'deepseek-chat' },
-    { envVar: 'GROQ_API_KEY', model: 'groq:llama-3.3-70b-versatile' },
-    { envVar: 'MISTRAL_API_KEY', model: 'mistral-small-latest' },
     { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:google/gemini-2.5-flash-preview-05-20' },
+    { envVar: 'MISTRAL_API_KEY', model: 'mistral-small-latest' },
+    // EXPENSIVE models (last resort)
+    { envVar: 'ANTHROPIC_API_KEY', model: 'claude-sonnet-4-20250514' },
+    { envVar: 'OPENAI_API_KEY', model: 'gpt-5-mini' },
   ];
   
+  const seen = new Set<string>();
   for (const { envVar, model } of fallbackOrder) {
-    if (process.env[envVar]) {
+    if (process.env[envVar] && !seen.has(model)) {
       fallbacks.push(model);
+      seen.add(model);
     }
   }
   
