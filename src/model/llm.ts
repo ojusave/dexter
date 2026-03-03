@@ -20,22 +20,27 @@ export const DEFAULT_MODEL = 'gpt-5.2';
 
 /**
  * Fallback chain for when primary provider has billing/quota issues.
- * Order: FREE/CHEAP models first → paid as last resort
- * Only includes providers with API keys configured.
+ * Order: CHEAP paid → FREE tier → EXPENSIVE (last resort)
+ * 
+ * NOTE: OpenRouter :free models are NOT used because:
+ * - They return 401 when overloaded (misclassified as auth failures)
+ * - They are extremely slow (250-400s per request)
+ * - They cause cascading cooldowns that break the pipeline
  */
 function getAvailableFallbackModels(): string[] {
   const fallbacks: string[] = [];
   
-  // Priority order: FREE → CHEAP → EXPENSIVE
-  // This ensures we save credits wherever possible
+  // Priority order: CHEAPEST PAID → FREE TIER → EXPENSIVE
   const fallbackOrder = [
-    // FREE tier models first
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct:free' },
-    { envVar: 'GROQ_API_KEY', model: 'groq:llama-3.3-70b-versatile' },  // Free tier
-    { envVar: 'DEEPSEEK_API_KEY', model: 'deepseek-chat' },  // Very cheap
+    // CHEAPEST paid model: Llama 3.3 70B ($0.10/$0.32 per 1M tokens)
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct' },
+    // OpenRouter auto (smart routing)
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:openrouter/auto' },
+    // FREE tier with rate limits (fallback)
+    { envVar: 'GROQ_API_KEY', model: 'groq:llama-3.3-70b-versatile' },
     // CHEAP paid models
+    { envVar: 'DEEPSEEK_API_KEY', model: 'deepseek-chat' },
     { envVar: 'GOOGLE_API_KEY', model: 'gemini-2.5-flash-preview-05-20' },
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:google/gemini-2.5-flash-preview-05-20' },
     { envVar: 'MISTRAL_API_KEY', model: 'mistral-small-latest' },
     // EXPENSIVE models (last resort)
     { envVar: 'ANTHROPIC_API_KEY', model: 'claude-sonnet-4-20250514' },
