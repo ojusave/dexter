@@ -37,7 +37,9 @@ function getAvailableFallbackModels(): string[] {
     { envVar: 'CEREBRAS_API_KEY', model: 'cerebras:llama-3.3-70b' },
     { envVar: 'SAMBANOVA_API_KEY', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
     { envVar: 'NVIDIA_API_KEY', model: 'nvidia:meta/llama-3.1-70b-instruct' },
-    // CHEAP paid models (no free tier)
+    // OpenRouter free router (routes to free models automatically)
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:openrouter/free' },
+    // CHEAP paid models (fallback)
     { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct' },
     { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:openrouter/auto' },
     { envVar: 'GOOGLE_API_KEY', model: 'gemini-2.5-flash-preview-05-20' },
