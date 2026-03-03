@@ -36,6 +36,7 @@ function getAvailableFallbackModels(): string[] {
     { envVar: 'GROQ_API_KEY', model: 'groq:llama-3.3-70b-versatile' },
     { envVar: 'CEREBRAS_API_KEY', model: 'cerebras:llama-3.3-70b' },
     { envVar: 'SAMBANOVA_API_KEY', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
+    { envVar: 'NVIDIA_API_KEY', model: 'nvidia:meta/llama-3.1-70b-instruct' },
     // CHEAP paid models
     { envVar: 'DEEPSEEK_API_KEY', model: 'deepseek-chat' },
     { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct' },
@@ -270,6 +271,15 @@ const MODEL_FACTORIES: Record<string, ModelFactory> = {
       apiKey: getApiKey('SAMBANOVA_API_KEY'),
       configuration: {
         baseURL: 'https://api.sambanova.ai/v1',
+      },
+    }),
+  nvidia: (name, opts) =>
+    new ChatOpenAI({
+      model: name.replace(/^nvidia:/, ''),
+      ...opts,
+      apiKey: getApiKey('NVIDIA_API_KEY'),
+      configuration: {
+        baseURL: 'https://integrate.api.nvidia.com/v1',
       },
     }),
   ollama: (name, opts) =>

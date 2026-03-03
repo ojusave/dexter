@@ -88,6 +88,13 @@ export const PROVIDERS: ProviderDef[] = [
     fastModel: 'sambanova:Meta-Llama-3.3-70B-Instruct',
   },
   {
+    id: 'nvidia',
+    displayName: 'NVIDIA NIM',
+    modelPrefix: 'nvidia:',
+    apiKeyEnvVar: 'NVIDIA_API_KEY',
+    fastModel: 'nvidia:meta/llama-3.1-70b-instruct',
+  },
+  {
     id: 'openrouter',
     displayName: 'OpenRouter',
     modelPrefix: 'openrouter:',
