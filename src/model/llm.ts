@@ -15,12 +15,12 @@ import { logger } from '@/utils';
 import { classifyError, isNonRetryableError, isBillingError, isRateLimitError } from '@/utils/errors';
 import { resolveProvider, getProviderById, PROVIDERS } from '@/providers';
 
-export const DEFAULT_PROVIDER = 'openai';
-export const DEFAULT_MODEL = 'gpt-5.2';
+export const DEFAULT_PROVIDER = 'groq';
+export const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
 
 /**
  * Fallback chain for when primary provider has billing/quota issues.
- * Order: CHEAP paid → FREE tier → EXPENSIVE (last resort)
+ * Order: FREE tier → CHEAP paid → EXPENSIVE (last resort)
  * 
  * NOTE: OpenRouter :free models are NOT used because:
  * - They return 401 when overloaded (misclassified as auth failures)
@@ -30,16 +30,16 @@ export const DEFAULT_MODEL = 'gpt-5.2';
 function getAvailableFallbackModels(): string[] {
   const fallbacks: string[] = [];
   
-  // Priority order: CHEAPEST PAID → FREE TIER → EXPENSIVE
+  // Priority order: FREE TIER → CHEAP PAID → EXPENSIVE
   const fallbackOrder = [
-    // CHEAPEST paid model: Llama 3.3 70B ($0.10/$0.32 per 1M tokens)
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct' },
-    // OpenRouter auto (smart routing)
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:openrouter/auto' },
-    // FREE tier with rate limits (fallback)
+    // FREE tier providers (prioritize these to save costs)
     { envVar: 'GROQ_API_KEY', model: 'groq:llama-3.3-70b-versatile' },
+    { envVar: 'CEREBRAS_API_KEY', model: 'cerebras:llama-3.3-70b' },
+    { envVar: 'SAMBANOVA_API_KEY', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
     // CHEAP paid models
     { envVar: 'DEEPSEEK_API_KEY', model: 'deepseek-chat' },
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct' },
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:openrouter/auto' },
     { envVar: 'GOOGLE_API_KEY', model: 'gemini-2.5-flash-preview-05-20' },
     { envVar: 'MISTRAL_API_KEY', model: 'mistral-small-latest' },
     // EXPENSIVE models (last resort)
@@ -261,6 +261,15 @@ const MODEL_FACTORIES: Record<string, ModelFactory> = {
       apiKey: getApiKey('CEREBRAS_API_KEY'),
       configuration: {
         baseURL: 'https://api.cerebras.ai/v1',
+      },
+    }),
+  sambanova: (name, opts) =>
+    new ChatOpenAI({
+      model: name.replace(/^sambanova:/, ''),
+      ...opts,
+      apiKey: getApiKey('SAMBANOVA_API_KEY'),
+      configuration: {
+        baseURL: 'https://api.sambanova.ai/v1',
       },
     }),
   ollama: (name, opts) =>

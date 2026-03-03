@@ -81,6 +81,13 @@ export const PROVIDERS: ProviderDef[] = [
     fastModel: 'cerebras:llama3.1-8b',
   },
   {
+    id: 'sambanova',
+    displayName: 'SambaNova',
+    modelPrefix: 'sambanova:',
+    apiKeyEnvVar: 'SAMBANOVA_API_KEY',
+    fastModel: 'sambanova:Meta-Llama-3.3-70B-Instruct',
+  },
+  {
     id: 'openrouter',
     displayName: 'OpenRouter',
     modelPrefix: 'openrouter:',
