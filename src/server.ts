@@ -2,9 +2,14 @@
  * HTTP API server for Dexter.
  * Wraps the Agent in a simple REST API so other services can call it.
  * Supports model fallback chain via DEXTER_FALLBACK_MODELS env var.
+ * 
+ * Automatic fallback: When a provider hits billing/quota limits, the LLM layer
+ * automatically falls back to other configured providers. Providers in cooldown
+ * are skipped for 5 minutes before being retried.
  */
 import { config } from 'dotenv';
 import { Agent } from './agent/agent.js';
+import { getProviderStatus, clearProviderCooldown } from './model/llm.js';
 
 config({ quiet: true });
 
@@ -76,10 +81,50 @@ const server = Bun.serve({
     // Health check
     if (url.pathname === '/api/health' && req.method === 'GET') {
       const models = getModelChain();
+      const providers = getProviderStatus();
+      const availableProviders = providers.filter(p => p.available);
+      
       return Response.json(
-        { status: 'ok', primaryModel: models[0], fallbackModels: models.slice(1) },
+        { 
+          status: availableProviders.length > 0 ? 'ok' : 'degraded',
+          primaryModel: models[0], 
+          fallbackModels: models.slice(1),
+          providers,
+          availableCount: availableProviders.length,
+          totalCount: providers.length,
+        },
         { headers: corsHeaders }
       );
+    }
+
+    // Provider status endpoint (detailed)
+    if (url.pathname === '/api/providers' && req.method === 'GET') {
+      const providers = getProviderStatus();
+      return Response.json({ providers }, { headers: corsHeaders });
+    }
+
+    // Reset provider cooldowns (admin endpoint)
+    if (url.pathname === '/api/providers/reset' && req.method === 'POST') {
+      try {
+        const body = await req.json() as { providerId?: string };
+        clearProviderCooldown(body.providerId);
+        return Response.json(
+          { 
+            success: true, 
+            message: body.providerId 
+              ? `Cleared cooldown for ${body.providerId}` 
+              : 'Cleared all provider cooldowns',
+            providers: getProviderStatus(),
+          },
+          { headers: corsHeaders }
+        );
+      } catch {
+        clearProviderCooldown();
+        return Response.json(
+          { success: true, message: 'Cleared all provider cooldowns', providers: getProviderStatus() },
+          { headers: corsHeaders }
+        );
+      }
     }
 
     // Research endpoint

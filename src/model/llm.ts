@@ -12,11 +12,103 @@ import { z } from 'zod';
 import { DEFAULT_SYSTEM_PROMPT } from '@/agent/prompts';
 import type { TokenUsage } from '@/agent/types';
 import { logger } from '@/utils';
-import { classifyError, isNonRetryableError } from '@/utils/errors';
-import { resolveProvider, getProviderById } from '@/providers';
+import { classifyError, isNonRetryableError, isBillingError, isRateLimitError } from '@/utils/errors';
+import { resolveProvider, getProviderById, PROVIDERS } from '@/providers';
 
 export const DEFAULT_PROVIDER = 'openai';
 export const DEFAULT_MODEL = 'gpt-5.2';
+
+/**
+ * Fallback chain for when primary provider has billing/quota issues.
+ * Order matters: tries each in sequence until one works.
+ * Only includes providers with API keys configured.
+ */
+function getAvailableFallbackModels(): string[] {
+  const fallbacks: string[] = [];
+  
+  // Priority order for fallbacks (paid tiers first, then free)
+  const fallbackOrder = [
+    { envVar: 'ANTHROPIC_API_KEY', model: 'claude-sonnet-4-20250514' },
+    { envVar: 'GOOGLE_API_KEY', model: 'gemini-2.5-flash-preview-05-20' },
+    { envVar: 'DEEPSEEK_API_KEY', model: 'deepseek-chat' },
+    { envVar: 'GROQ_API_KEY', model: 'groq:llama-3.3-70b-versatile' },
+    { envVar: 'MISTRAL_API_KEY', model: 'mistral-small-latest' },
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:google/gemini-2.5-flash-preview-05-20' },
+  ];
+  
+  for (const { envVar, model } of fallbackOrder) {
+    if (process.env[envVar]) {
+      fallbacks.push(model);
+    }
+  }
+  
+  return fallbacks;
+}
+
+// Track which providers have had billing errors (circuit breaker)
+const providerBillingErrors: Map<string, number> = new Map();
+const BILLING_ERROR_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
+function markProviderBillingError(providerId: string): void {
+  providerBillingErrors.set(providerId, Date.now());
+  logger.warn(`[LLM] Provider ${providerId} marked as having billing issues, will use fallback`);
+}
+
+function isProviderInCooldown(providerId: string): boolean {
+  const errorTime = providerBillingErrors.get(providerId);
+  if (!errorTime) return false;
+  
+  const elapsed = Date.now() - errorTime;
+  if (elapsed > BILLING_ERROR_COOLDOWN_MS) {
+    providerBillingErrors.delete(providerId);
+    logger.info(`[LLM] Provider ${providerId} cooldown expired, will retry`);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Get the current status of all providers for health monitoring.
+ */
+export function getProviderStatus(): Array<{
+  id: string;
+  name: string;
+  available: boolean;
+  hasApiKey: boolean;
+  inCooldown: boolean;
+  cooldownRemainingMs?: number;
+}> {
+  return PROVIDERS.map(provider => {
+    const hasApiKey = provider.apiKeyEnvVar ? !!process.env[provider.apiKeyEnvVar] : true;
+    const errorTime = providerBillingErrors.get(provider.id);
+    const inCooldown = isProviderInCooldown(provider.id);
+    const cooldownRemainingMs = errorTime && inCooldown 
+      ? BILLING_ERROR_COOLDOWN_MS - (Date.now() - errorTime)
+      : undefined;
+    
+    return {
+      id: provider.id,
+      name: provider.displayName,
+      available: hasApiKey && !inCooldown,
+      hasApiKey,
+      inCooldown,
+      cooldownRemainingMs,
+    };
+  });
+}
+
+/**
+ * Manually clear cooldown for a provider (useful for admin reset).
+ */
+export function clearProviderCooldown(providerId?: string): void {
+  if (providerId) {
+    providerBillingErrors.delete(providerId);
+    logger.info(`[LLM] Cleared cooldown for provider ${providerId}`);
+  } else {
+    providerBillingErrors.clear();
+    logger.info(`[LLM] Cleared all provider cooldowns`);
+  }
+}
 
 /**
  * Gets the fast model variant for the given provider.
@@ -35,6 +127,14 @@ async function withRetry<T>(fn: () => Promise<T>, provider: string, maxAttempts 
       const message = e instanceof Error ? e.message : String(e);
       const errorType = classifyError(message);
       logger.error(`[${provider} API] ${errorType} error (attempt ${attempt + 1}/${maxAttempts}): ${message}`);
+
+      // Mark billing errors for circuit breaker
+      if (isBillingError(message) || isRateLimitError(message)) {
+        const providerDef = PROVIDERS.find(p => p.displayName === provider);
+        if (providerDef) {
+          markProviderBillingError(providerDef.id);
+        }
+      }
 
       if (isNonRetryableError(message)) {
         throw new Error(`[${provider} API] ${message}`);
@@ -236,11 +336,18 @@ function buildAnthropicMessages(systemPrompt: string, userPrompt: string) {
   ];
 }
 
-export async function callLlm(prompt: string, options: CallLlmOptions = {}): Promise<LlmResult> {
-  const { model = DEFAULT_MODEL, systemPrompt, outputSchema, tools, signal } = options;
-  const finalSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
-
-  const llm = getChatModel(model, false);
+/**
+ * Internal function to invoke a specific model without fallback logic.
+ */
+async function invokeModel(
+  modelName: string,
+  prompt: string,
+  finalSystemPrompt: string,
+  outputSchema: z.ZodType<unknown> | undefined,
+  tools: StructuredToolInterface[] | undefined,
+  signal: AbortSignal | undefined
+): Promise<{ result: unknown; provider: ReturnType<typeof resolveProvider> }> {
+  const llm = getChatModel(modelName, false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let runnable: Runnable<any, any> = llm;
@@ -252,15 +359,13 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
   }
 
   const invokeOpts = signal ? { signal } : undefined;
-  const provider = resolveProvider(model);
-  let result;
+  const provider = resolveProvider(modelName);
 
+  let result;
   if (provider.id === 'anthropic') {
-    // Anthropic: use explicit messages with cache_control for prompt caching (~90% savings)
     const messages = buildAnthropicMessages(finalSystemPrompt, prompt);
     result = await withRetry(() => runnable.invoke(messages, invokeOpts), provider.displayName);
   } else {
-    // Other providers: use ChatPromptTemplate (OpenAI/Gemini have automatic caching)
     const promptTemplate = ChatPromptTemplate.fromMessages([
       ['system', finalSystemPrompt],
       ['user', '{prompt}'],
@@ -268,12 +373,95 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
     const chain = promptTemplate.pipe(runnable);
     result = await withRetry(() => chain.invoke({ prompt }, invokeOpts), provider.displayName);
   }
-  const usage = extractUsage(result);
 
-  // If no outputSchema and no tools, extract content from AIMessage
-  // When tools are provided, return the full AIMessage to preserve tool_calls
-  if (!outputSchema && !tools && result && typeof result === 'object' && 'content' in result) {
-    return { response: (result as { content: string }).content, usage };
+  return { result, provider };
+}
+
+export async function callLlm(prompt: string, options: CallLlmOptions = {}): Promise<LlmResult> {
+  const { model = DEFAULT_MODEL, systemPrompt, outputSchema, tools, signal } = options;
+  const finalSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
+
+  // Build list of models to try: primary + fallbacks
+  const modelsToTry: string[] = [];
+  const primaryProvider = resolveProvider(model);
+  
+  // Skip primary if it's in cooldown due to billing errors
+  if (!isProviderInCooldown(primaryProvider.id)) {
+    modelsToTry.push(model);
+  } else {
+    logger.info(`[LLM] Skipping ${primaryProvider.displayName} (in billing cooldown), using fallback`);
   }
-  return { response: result as AIMessage, usage };
+  
+  // Add fallbacks that aren't the same provider as primary
+  const fallbacks = getAvailableFallbackModels();
+  for (const fallbackModel of fallbacks) {
+    const fallbackProvider = resolveProvider(fallbackModel);
+    if (fallbackProvider.id !== primaryProvider.id && !isProviderInCooldown(fallbackProvider.id)) {
+      modelsToTry.push(fallbackModel);
+    }
+  }
+
+  if (modelsToTry.length === 0) {
+    throw new Error('[LLM] No available providers - all are in billing cooldown. Please check API keys and billing.');
+  }
+
+  let lastError: Error | null = null;
+
+  for (let i = 0; i < modelsToTry.length; i++) {
+    const currentModel = modelsToTry[i];
+    const currentProvider = resolveProvider(currentModel);
+    const isRetry = i > 0;
+
+    if (isRetry) {
+      logger.info(`[LLM] Falling back to ${currentProvider.displayName} (${currentModel})`);
+    }
+
+    try {
+      const { result, provider } = await invokeModel(
+        currentModel,
+        prompt,
+        finalSystemPrompt,
+        outputSchema,
+        tools,
+        signal
+      );
+
+      const usage = extractUsage(result);
+
+      if (isRetry) {
+        logger.info(`[LLM] Fallback to ${provider.displayName} succeeded`);
+      }
+
+      // If no outputSchema and no tools, extract content from AIMessage
+      // When tools are provided, return the full AIMessage to preserve tool_calls
+      if (!outputSchema && !tools && result && typeof result === 'object' && 'content' in result) {
+        return { response: (result as { content: string }).content, usage };
+      }
+      return { response: result as AIMessage, usage };
+
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      lastError = e instanceof Error ? e : new Error(message);
+
+      // If it's a billing/rate limit error and we have more fallbacks, continue
+      if (isBillingError(message) || isRateLimitError(message)) {
+        markProviderBillingError(currentProvider.id);
+        
+        if (i < modelsToTry.length - 1) {
+          logger.warn(`[LLM] ${currentProvider.displayName} billing/rate limit error, trying next fallback...`);
+          continue;
+        }
+      }
+
+      // For non-billing errors or if this is the last fallback, throw
+      if (i === modelsToTry.length - 1) {
+        throw lastError;
+      }
+
+      // For other errors, also try fallback
+      logger.warn(`[LLM] ${currentProvider.displayName} error: ${message}, trying next fallback...`);
+    }
+  }
+
+  throw lastError || new Error('[LLM] All providers failed');
 }
