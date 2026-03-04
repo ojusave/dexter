@@ -20,10 +20,7 @@ export const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
 
 /**
  * Fallback chain for when primary provider has billing/quota issues.
- * Order: FREE tier → CHEAP paid → EXPENSIVE (last resort)
- * 
- * OpenRouter FREE models: Use :free suffix (e.g., model-name:free) for zero cost.
- * IMPORTANT: openrouter/free router is NOT free - it routes to paid providers!
+ * Order: FREE tier (Groq, Cerebras, Nvidia, SambaNova) → CHEAP paid → EXPENSIVE (last resort)
  */
 function getAvailableFallbackModels(): string[] {
   const fallbacks: string[] = [];
@@ -240,15 +237,6 @@ const MODEL_FACTORIES: Record<string, ModelFactory> = {
       apiKey: getApiKey('MISTRAL_API_KEY'),
       configuration: {
         baseURL: 'https://api.mistral.ai/v1',
-      },
-    }),
-  groq: (name, opts) =>
-    new ChatOpenAI({
-      model: name.replace(/^groq:/, ''),
-      ...opts,
-      apiKey: getApiKey('GROQ_API_KEY'),
-      configuration: {
-        baseURL: 'https://api.groq.com/openai/v1',
       },
     }),
   cerebras: (name, opts) =>

@@ -99,8 +99,7 @@ export const PROVIDERS: ProviderDef[] = [
     displayName: 'OpenRouter',
     modelPrefix: 'openrouter:',
     apiKeyEnvVar: 'OPENROUTER_API_KEY',
-    // Use :free suffix for zero-cost inference (20 RPM, 200 RPD)
-    fastModel: 'openrouter:meta-llama/llama-3.3-70b-instruct:free',
+    fastModel: 'openrouter:openrouter/auto',
   },
   {
     id: 'ollama',
