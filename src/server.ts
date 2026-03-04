@@ -33,15 +33,14 @@ function getModelChain(requestModel?: string): string[] {
 /** Run agent with a single model, returns result or throws */
 async function runAgent(
   query: string,
-  model: string,
-  maxIterations: number
+  model: string
 ): Promise<{
   answer: string;
   toolCalls: Array<{ tool: string; args: Record<string, unknown>; duration?: number }>;
   iterations: number;
   totalTime: number;
 }> {
-  const agent = await Agent.create({ model, maxIterations });
+  const agent = await Agent.create({ model });
 
   let answer = '';
   const toolCalls: Array<{ tool: string; args: Record<string, unknown>; duration?: number }> = [];
@@ -130,7 +129,7 @@ const server = Bun.serve({
     // Research endpoint
     if (url.pathname === '/api/research' && req.method === 'POST') {
       try {
-        const body = await req.json() as { query?: string; model?: string; maxIterations?: number };
+        const body = await req.json() as { query?: string; model?: string };
 
         if (!body.query) {
           return Response.json(
@@ -140,13 +139,12 @@ const server = Bun.serve({
         }
 
         const models = getModelChain(body.model);
-        const maxIterations = body.maxIterations || 10;
         const errors: string[] = [];
 
         for (const model of models) {
           try {
             console.log(`[research] trying model: ${model}`);
-            const result = await runAgent(body.query, model, maxIterations);
+            const result = await runAgent(body.query, model);
             return Response.json(
               { ...result, model },
               { headers: corsHeaders }

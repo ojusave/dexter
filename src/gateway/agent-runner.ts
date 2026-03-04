@@ -27,7 +27,6 @@ export type AgentRunRequest = {
   query: string;
   model: string;
   modelProvider: string;
-  maxIterations?: number;
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void | Promise<void>;
 };
@@ -41,7 +40,6 @@ export async function runAgentForMessage(req: AgentRunRequest): Promise<string> 
     const agent = await Agent.create({
       model: req.model,
       modelProvider: req.modelProvider,
-      maxIterations: req.maxIterations ?? 10,
       signal: req.signal,
     });
     for await (const event of agent.run(req.query, session.history)) {

@@ -14,8 +14,6 @@ export interface AgentConfig {
   model?: string;
   /** Model provider (e.g., 'openai', 'anthropic', 'google', 'ollama') */
   modelProvider?: string;
-  /** Maximum agent loop iterations (default: 10) */
-  maxIterations?: number;
   /** AbortSignal for cancelling agent execution */
   signal?: AbortSignal;
   /** Called when a tool needs explicit user approval to proceed */

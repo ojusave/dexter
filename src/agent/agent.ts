@@ -14,7 +14,7 @@ import { AgentToolExecutor } from './tool-executor.js';
 
 
 const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
-const DEFAULT_MAX_ITERATIONS = 10;
+const MAX_ITERATIONS = 100;  // Safety limit only - agent should finish naturally before this
 const MAX_OVERFLOW_RETRIES = 2;
 const OVERFLOW_KEEP_TOOL_USES = 3;
 
@@ -23,7 +23,6 @@ const OVERFLOW_KEEP_TOOL_USES = 3;
  */
 export class Agent {
   private readonly model: string;
-  private readonly maxIterations: number;
   private readonly tools: StructuredToolInterface[];
   private readonly toolMap: Map<string, StructuredToolInterface>;
   private readonly toolExecutor: AgentToolExecutor;
@@ -36,7 +35,6 @@ export class Agent {
     systemPrompt: string
   ) {
     this.model = config.model ?? DEFAULT_MODEL;
-    this.maxIterations = config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
     this.tools = tools;
     this.toolMap = new Map(tools.map(t => [t.name, t]));
     this.toolExecutor = new AgentToolExecutor(this.toolMap, config.signal, config.requestToolApproval, config.sessionApprovedTools);
@@ -75,7 +73,7 @@ export class Agent {
 
     // Main agent loop
     let overflowRetries = 0;
-    while (ctx.iteration < this.maxIterations) {
+    while (ctx.iteration < MAX_ITERATIONS) {
       ctx.iteration++;
 
       let response: AIMessage | string;
@@ -163,11 +161,11 @@ export class Agent {
       );
     }
 
-    // Max iterations reached with no final response
+    // Safety limit reached - this shouldn't happen in normal operation
     const totalTime = Date.now() - ctx.startTime;
     yield {
       type: 'done',
-      answer: `Reached maximum iterations (${this.maxIterations}). I was unable to complete the research in the allotted steps.`,
+      answer: `Reached safety limit (${MAX_ITERATIONS} iterations). The agent may be stuck in a loop.`,
       toolCalls: ctx.scratchpad.getToolCallRecords(),
       iterations: ctx.iteration,
       totalTime,
