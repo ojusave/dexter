@@ -28,17 +28,13 @@ export const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
 function getAvailableFallbackModels(): string[] {
   const fallbacks: string[] = [];
   
-  // Priority order: FREE TIER (fast providers first) → OpenRouter free → CHEAP PAID → EXPENSIVE
+  // Priority order: FREE TIER (fast providers) → CHEAP PAID → EXPENSIVE
   const fallbackOrder = [
     // FREE tier providers with generous limits (fastest, most reliable)
     { envVar: 'GROQ_API_KEY', model: 'groq:llama-3.3-70b-versatile' },
     { envVar: 'CEREBRAS_API_KEY', model: 'cerebras:llama-3.3-70b' },
     { envVar: 'NVIDIA_API_KEY', model: 'nvidia:meta/llama-3.1-70b-instruct' },
     { envVar: 'SAMBANOVA_API_KEY', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
-    // OpenRouter :free suffix (20 RPM, 200 RPD per model - use as backup)
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct:free' },
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:qwen/qwen3-30b-a3b:free' },
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:google/gemma-3-27b-it:free' },
     // CHEAP paid models (fallback)
     { envVar: 'GOOGLE_API_KEY', model: 'gemini-2.5-flash-preview-05-20' },
     { envVar: 'MISTRAL_API_KEY', model: 'mistral-small-latest' },

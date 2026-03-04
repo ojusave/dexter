@@ -10,7 +10,7 @@ services:
       - key: DEXTER_MODEL
         value: groq:llama-3.3-70b-versatile
       - key: DEXTER_FALLBACK_MODELS
-        value: cerebras:llama-3.3-70b,nvidia:meta/llama-3.1-70b-instruct,openrouter:meta-llama/llama-3.3-70b-instruct:free,openrouter:qwen/qwen3-30b-a3b:free,gemini-2.5-flash-preview-05-20,gpt-5-mini
+        value: cerebras:llama-3.3-70b,nvidia:meta/llama-3.1-70b-instruct,gemini-2.5-flash-preview-05-20,mistral-small-latest,gpt-5-mini
       - key: GROQ_API_KEY
         sync: false
       - key: OPENAI_API_KEY
