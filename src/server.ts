@@ -17,7 +17,7 @@ const PORT = parseInt(process.env.PORT || '3100', 10);
 
 /** Build ordered list of models: primary + fallbacks */
 function getModelChain(requestModel?: string): string[] {
-  const primary = requestModel || process.env.DEXTER_MODEL || 'gpt-5.2';
+  const primary = requestModel || process.env.DEXTER_MODEL || 'openrouter:meta-llama/llama-3.3-70b-instruct:free';
   const fallbacks = (process.env.DEXTER_FALLBACK_MODELS || '')
     .split(',')
     .map(m => m.trim())

@@ -15,8 +15,8 @@ import { logger } from '@/utils';
 import { classifyError, isNonRetryableError, isBillingError, isRateLimitError } from '@/utils/errors';
 import { resolveProvider, getProviderById, PROVIDERS } from '@/providers';
 
-export const DEFAULT_PROVIDER = 'groq';
-export const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
+export const DEFAULT_PROVIDER = 'openrouter';
+export const DEFAULT_MODEL = 'openrouter:meta-llama/llama-3.3-70b-instruct:free';
 
 /**
  * Fallback chain for when primary provider has billing/quota issues.
@@ -30,16 +30,20 @@ function getAvailableFallbackModels(): string[] {
   
   // Priority order: FREE TIER → CHEAP PAID → EXPENSIVE
   const fallbackOrder = [
-    // FREE tier providers (prioritize these to save costs)
+    // OpenRouter :free suffix = truly free (20 RPM, 200 RPD per model)
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct:free' },
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:openai/gpt-oss-20b:free' },
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:qwen/qwen3-30b-a3b:free' },
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:google/gemma-3-27b-it:free' },
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:mistralai/mistral-small-3.1-24b-instruct:free' },
+    // FREE tier providers (generous free tiers)
     { envVar: 'GROQ_API_KEY', model: 'groq:llama-3.3-70b-versatile' },
+    { envVar: 'GROQ_API_KEY', model: 'groq:meta-llama/llama-4-scout-17b-16e-instruct' },
     { envVar: 'CEREBRAS_API_KEY', model: 'cerebras:llama-3.3-70b' },
     { envVar: 'SAMBANOVA_API_KEY', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
     { envVar: 'NVIDIA_API_KEY', model: 'nvidia:meta/llama-3.1-70b-instruct' },
-    // OpenRouter :free suffix = truly free (20 RPM, 200 RPD per model)
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct:free' },
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:qwen/qwen3-30b-a3b:free' },
     // CHEAP paid models (fallback)
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:meta-llama/llama-3.3-70b-instruct' },
+    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:openrouter/auto' },
     { envVar: 'GOOGLE_API_KEY', model: 'gemini-2.5-flash-preview-05-20' },
     { envVar: 'MISTRAL_API_KEY', model: 'mistral-small-latest' },
     // EXPENSIVE models (last resort)
