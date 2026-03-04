@@ -8,9 +8,9 @@ services:
       - key: PORT
         value: "3100"
       - key: DEXTER_MODEL
-        value: openrouter:meta-llama/llama-3.3-70b-instruct:free
+        value: groq:llama-3.3-70b-versatile
       - key: DEXTER_FALLBACK_MODELS
-        value: openrouter:openai/gpt-oss-20b:free,groq:meta-llama/llama-4-scout-17b-16e-instruct,cerebras:llama3.1-8b,openrouter:openrouter/auto,gpt-5-mini
+        value: cerebras:llama-3.3-70b,nvidia:meta/llama-3.1-70b-instruct,openrouter:meta-llama/llama-3.3-70b-instruct:free,openrouter:qwen/qwen3-30b-a3b:free,gemini-2.5-flash-preview-05-20,gpt-5-mini
       - key: GROQ_API_KEY
         sync: false
       - key: OPENAI_API_KEY
