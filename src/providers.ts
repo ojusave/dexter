@@ -99,7 +99,8 @@ export const PROVIDERS: ProviderDef[] = [
     displayName: 'OpenRouter',
     modelPrefix: 'openrouter:',
     apiKeyEnvVar: 'OPENROUTER_API_KEY',
-    fastModel: 'openrouter:google/gemini-3-flash-preview',
+    // Use :free suffix for zero-cost inference (20 RPM, 200 RPD)
+    fastModel: 'openrouter:meta-llama/llama-3.3-70b-instruct:free',
   },
   {
     id: 'ollama',
