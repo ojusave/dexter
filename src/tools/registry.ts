@@ -1,6 +1,6 @@
 import { StructuredToolInterface } from '@langchain/core/tools';
 import { createFinancialSearch, createFinancialMetrics, createReadFilings } from './finance/index.js';
-import { exaSearch, perplexitySearch, tavilySearch, WEB_SEARCH_DESCRIPTION } from './search/index.js';
+import { fallbackSearch, WEB_SEARCH_DESCRIPTION } from './search/index.js';
 import { skillTool, SKILL_TOOL_DESCRIPTION } from './skill.js';
 import { webFetchTool, WEB_FETCH_DESCRIPTION } from './fetch/web-fetch.js';
 import { readFileTool, READ_FILE_DESCRIPTION } from './filesystem/read-file.js';
@@ -87,23 +87,12 @@ export function getToolRegistry(model: string): RegisteredTool[] {
     });
   }
 
-  // Include web_search if Exa, Perplexity, or Tavily API key is configured (Exa → Perplexity → Tavily)
-  if (process.env.EXASEARCH_API_KEY) {
+  // Include web_search if any search API key is configured
+  // Uses fallback chain: Exa → Perplexity → Tavily (automatically retries on failure)
+  if (process.env.EXASEARCH_API_KEY || process.env.PERPLEXITY_API_KEY || process.env.TAVILY_API_KEY) {
     tools.push({
       name: 'web_search',
-      tool: exaSearch,
-      description: WEB_SEARCH_DESCRIPTION,
-    });
-  } else if (process.env.PERPLEXITY_API_KEY) {
-    tools.push({
-      name: 'web_search',
-      tool: perplexitySearch,
-      description: WEB_SEARCH_DESCRIPTION,
-    });
-  } else if (process.env.TAVILY_API_KEY) {
-    tools.push({
-      name: 'web_search',
-      tool: tavilySearch,
+      tool: fallbackSearch,
       description: WEB_SEARCH_DESCRIPTION,
     });
   }

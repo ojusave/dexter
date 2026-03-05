@@ -259,7 +259,7 @@ export function createReadFilings(model: string): DynamicStructuredTool {
         }, filingsResult.sourceUrls || []);
       }
 
-      const limitedToolCalls = step2ToolCalls.slice(0, 3);
+      const limitedToolCalls = step2ToolCalls.slice(0, 10);  // Allow more filings
 
       // Execute filing items calls in parallel
       onProgress?.(`Reading ${limitedToolCalls.length} filing${limitedToolCalls.length !== 1 ? 's' : ''}...`);

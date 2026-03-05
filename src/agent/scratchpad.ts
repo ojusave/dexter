@@ -45,10 +45,10 @@ export interface ToolUsageStatus {
   blockReason?: string;
 }
 
-/** Default tool limit configuration */
+/** Default tool limit configuration - no limits, let the agent work freely */
 const DEFAULT_LIMIT_CONFIG: ToolLimitConfig = {
-  maxCallsPerTool: 3,
-  similarityThreshold: 0.7,
+  maxCallsPerTool: 999,  // Effectively unlimited
+  similarityThreshold: 0.99,  // Almost never trigger similarity warning
 };
 
 /**

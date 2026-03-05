@@ -126,7 +126,7 @@ const server = Bun.serve({
       }
     }
 
-    // Research endpoint
+    // Research endpoint (synchronous - waits for completion)
     if (url.pathname === '/api/research' && req.method === 'POST') {
       try {
         const body = await req.json() as { query?: string; model?: string };
@@ -160,6 +160,113 @@ const server = Bun.serve({
         return Response.json(
           { error: `All models failed. ${errors.join(' | ')}` },
           { status: 500, headers: corsHeaders }
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return Response.json(
+          { error: message },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Async research endpoint (returns immediately, sends result to webhook)
+    if (url.pathname === '/api/research/async' && req.method === 'POST') {
+      try {
+        const body = await req.json() as { 
+          query?: string; 
+          model?: string;
+          webhook_url?: string;
+          request_id?: string;
+          metadata?: Record<string, unknown>;
+        };
+
+        if (!body.query) {
+          return Response.json(
+            { error: 'Missing required field: query' },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        if (!body.webhook_url) {
+          return Response.json(
+            { error: 'Missing required field: webhook_url' },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        const requestId = body.request_id || crypto.randomUUID();
+        const webhookUrl = body.webhook_url;
+        const metadata = body.metadata || {};
+
+        // Return immediately with request ID
+        console.log(`[research/async] Starting async research: ${requestId}`);
+        
+        // Run research in background and send to webhook when done
+        (async () => {
+          const startTime = Date.now();
+          const models = getModelChain(body.model);
+          let result: Awaited<ReturnType<typeof runAgent>> | null = null;
+          let error: string | null = null;
+          let usedModel: string | null = null;
+
+          for (const model of models) {
+            try {
+              console.log(`[research/async:${requestId}] trying model: ${model}`);
+              result = await runAgent(body.query!, model);
+              usedModel = model;
+              break;
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.error(`[research/async:${requestId}] model ${model} failed: ${msg}`);
+              error = msg;
+            }
+          }
+
+          const payload = {
+            request_id: requestId,
+            query: body.query,
+            metadata,
+            completed_at: new Date().toISOString(),
+            duration_ms: Date.now() - startTime,
+            ...(result ? {
+              success: true,
+              answer: result.answer,
+              tool_calls: result.toolCalls,
+              iterations: result.iterations,
+              total_time: result.totalTime,
+              model: usedModel,
+            } : {
+              success: false,
+              error: error || 'All models failed',
+            }),
+          };
+
+          // Send to webhook
+          try {
+            console.log(`[research/async:${requestId}] Sending to webhook: ${webhookUrl}`);
+            const resp = await fetch(webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            if (!resp.ok) {
+              console.error(`[research/async:${requestId}] Webhook failed: ${resp.status}`);
+            } else {
+              console.log(`[research/async:${requestId}] Webhook delivered successfully`);
+            }
+          } catch (err) {
+            console.error(`[research/async:${requestId}] Webhook error:`, err);
+          }
+        })();
+
+        return Response.json(
+          { 
+            request_id: requestId, 
+            status: 'accepted',
+            message: 'Research started. Results will be sent to webhook when complete.',
+          },
+          { status: 202, headers: corsHeaders }
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

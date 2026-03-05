@@ -14,9 +14,9 @@ import { AgentToolExecutor } from './tool-executor.js';
 
 
 const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
-const MAX_ITERATIONS = 100;  // Safety limit only - agent should finish naturally before this
-const MAX_OVERFLOW_RETRIES = 2;
-const OVERFLOW_KEEP_TOOL_USES = 3;
+const MAX_ITERATIONS = 500;  // High safety limit - agent should finish naturally
+const MAX_OVERFLOW_RETRIES = 5;  // More retries for context overflow
+const OVERFLOW_KEEP_TOOL_USES = 5;  // Keep more tool results on overflow
 
 /**
  * The core agent class that handles the agent loop and tool execution.
@@ -98,7 +98,7 @@ export class Agent {
               currentPrompt = buildIterationPrompt(
                 query,
                 ctx.scratchpad.getToolResults(),
-                ctx.scratchpad.formatToolUsageForPrompt()
+                null  // No tool usage warnings
               );
               continue;
             }
@@ -157,7 +157,7 @@ export class Agent {
       currentPrompt = buildIterationPrompt(
         query, 
         ctx.scratchpad.getToolResults(),
-        ctx.scratchpad.formatToolUsageForPrompt()
+        null  // No tool usage warnings - let the agent work freely
       );
     }
 

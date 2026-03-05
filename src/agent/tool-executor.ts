@@ -81,17 +81,7 @@ export class AgentToolExecutor {
       }
     }
 
-    const limitCheck = ctx.scratchpad.canCallTool(toolName, toolQuery);
-
-    if (limitCheck.warning) {
-      yield {
-        type: 'tool_limit',
-        tool: toolName,
-        warning: limitCheck.warning,
-        blocked: false,
-      };
-    }
-
+    // No limit warnings - let the agent work freely
     yield { type: 'tool_start', tool: toolName, args: toolArgs };
 
     const toolStartTime = Date.now();
