@@ -45,6 +45,13 @@ export const fallbackSearch = new DynamicStructuredTool({
   func: async (input) => {
     const configuredProviders = PROVIDERS.filter(p => p.isConfigured());
     
+    // Log which providers are configured
+    console.log(`[web_search] Query: "${input.query.slice(0, 50)}..."`);
+    console.log(`[web_search] Configured providers: ${configuredProviders.map(p => p.name).join(', ')}`);
+    console.log(`[web_search] EXASEARCH_API_KEY set: ${!!process.env.EXASEARCH_API_KEY}`);
+    console.log(`[web_search] PERPLEXITY_API_KEY set: ${!!process.env.PERPLEXITY_API_KEY}`);
+    console.log(`[web_search] TAVILY_API_KEY set: ${!!process.env.TAVILY_API_KEY}`);
+    
     if (configuredProviders.length === 0) {
       throw new Error('No search providers configured. Set EXASEARCH_API_KEY, PERPLEXITY_API_KEY, or TAVILY_API_KEY.');
     }
@@ -53,28 +60,14 @@ export const fallbackSearch = new DynamicStructuredTool({
 
     for (const provider of configuredProviders) {
       try {
-        logger.info(`[web_search] Trying ${provider.name}...`);
+        console.log(`[web_search] Trying ${provider.name}...`);
         const result = await provider.tool.invoke({ query: input.query });
-        logger.info(`[web_search] ${provider.name} succeeded`);
+        console.log(`[web_search] ${provider.name} succeeded!`);
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.warn(`[web_search] ${provider.name} failed: ${message}`);
+        console.log(`[web_search] ${provider.name} FAILED: ${message}`);
         errors.push(`${provider.name}: ${message}`);
-        
-        // Check if it's a rate limit / credits error - try next provider
-        const isRateLimitError = 
-          message.includes('rate limit') ||
-          message.includes('credits') ||
-          message.includes('quota') ||
-          message.includes('exceeded') ||
-          message.includes('429') ||
-          message.includes('402');
-        
-        if (!isRateLimitError) {
-          // For non-rate-limit errors, still try next provider but log differently
-          logger.warn(`[web_search] Non-rate-limit error from ${provider.name}, trying next provider`);
-        }
       }
     }
 
