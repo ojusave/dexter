@@ -2,7 +2,7 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import YahooFinance from 'yahoo-finance2';
 import { z } from 'zod';
 import { formatToolResult } from '../types.js';
-import { exaSearch, perplexitySearch, tavilySearch } from '../search/index.js';
+import { fallbackSearch } from '../search/index.js';
 import { logger } from '@/utils';
 
 export const STOCK_PRICE_DESCRIPTION = `
@@ -33,25 +33,10 @@ function parseToolResult(rawResult: string): ParsedToolResult {
 async function fallbackViaWebSearch(ticker: string): Promise<{ data: unknown; sourceUrls: string[] }> {
   const query = `${ticker} stock price today`;
 
-  if (process.env.EXASEARCH_API_KEY) {
-    const result = await exaSearch.invoke({ query });
-    const parsed = parseToolResult(typeof result === 'string' ? result : JSON.stringify(result));
-    return { data: parsed.data, sourceUrls: parsed.sourceUrls || [] };
-  }
-
-  if (process.env.PERPLEXITY_API_KEY) {
-    const result = await perplexitySearch.invoke({ query });
-    const parsed = parseToolResult(typeof result === 'string' ? result : JSON.stringify(result));
-    return { data: parsed.data, sourceUrls: parsed.sourceUrls || [] };
-  }
-
-  if (process.env.TAVILY_API_KEY) {
-    const result = await tavilySearch.invoke({ query });
-    const parsed = parseToolResult(typeof result === 'string' ? result : JSON.stringify(result));
-    return { data: parsed.data, sourceUrls: parsed.sourceUrls || [] };
-  }
-
-  throw new Error('No web search provider configured for fallback');
+  // Use the fallback search which automatically tries Exa → Perplexity → Tavily
+  const result = await fallbackSearch.invoke({ query });
+  const parsed = parseToolResult(typeof result === 'string' ? result : JSON.stringify(result));
+  return { data: parsed.data, sourceUrls: parsed.sourceUrls || [] };
 }
 
 export const getStockPrice = new DynamicStructuredTool({
