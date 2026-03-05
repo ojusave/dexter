@@ -290,3 +290,9 @@ console.log(`  Primary model: ${models[0]}`);
 if (models.length > 1) {
   console.log(`  Fallback models: ${models.slice(1).join(' → ')}`)
 }
+
+// Log search provider configuration
+console.log(`  Search providers:`);
+console.log(`    EXASEARCH_API_KEY: ${process.env.EXASEARCH_API_KEY ? 'SET (' + process.env.EXASEARCH_API_KEY.length + ' chars)' : 'NOT SET'}`);
+console.log(`    PERPLEXITY_API_KEY: ${process.env.PERPLEXITY_API_KEY ? 'SET' : 'NOT SET'}`);
+console.log(`    TAVILY_API_KEY: ${process.env.TAVILY_API_KEY ? 'SET' : 'NOT SET'}`);
