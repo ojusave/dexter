@@ -11,7 +11,11 @@ services:
         value: groq:llama-3.3-70b-versatile
       - key: DEXTER_FALLBACK_MODELS
         value: cerebras:llama-3.3-70b,nvidia:meta/llama-3.1-70b-instruct,gemini-2.5-flash-preview-05-20,mistral-small-latest,gpt-5-mini
+      # Multi-key support: use comma-separated keys for rate limit rotation
+      # Example: GROQ_API_KEY=key1,key2,key3
       - key: GROQ_API_KEY
+        sync: false
+      - key: CEREBRAS_API_KEY
         sync: false
       - key: OPENAI_API_KEY
         sync: false
@@ -24,8 +28,6 @@ services:
       - key: OPENROUTER_API_KEY
         sync: false
       - key: MISTRAL_API_KEY
-        sync: false
-      - key: CEREBRAS_API_KEY
         sync: false
       - key: FINANCIAL_DATASETS_API_KEY
         sync: false

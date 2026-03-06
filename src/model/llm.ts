@@ -13,7 +13,7 @@ import { DEFAULT_SYSTEM_PROMPT } from '@/agent/prompts';
 import type { TokenUsage } from '@/agent/types';
 import { logger } from '@/utils';
 import { classifyError, isNonRetryableError, isBillingError, isRateLimitError } from '@/utils/errors';
-import { resolveProvider, getProviderById, PROVIDERS } from '@/providers';
+import { resolveProvider, getProviderById, getApiKeysForProvider, PROVIDERS } from '@/providers';
 
 export const DEFAULT_PROVIDER = 'groq';
 export const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
@@ -21,6 +21,8 @@ export const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
 /**
  * Fallback chain for when primary provider has billing/quota issues.
  * Order: FREE tier (Groq, Cerebras, Nvidia, SambaNova) → CHEAP paid → EXPENSIVE (last resort)
+ * 
+ * For multi-key providers (Groq, Cerebras), checks for numbered keys (GROQ_API_KEY_1, etc.)
  */
 function getAvailableFallbackModels(): string[] {
   const fallbacks: string[] = [];
@@ -28,24 +30,32 @@ function getAvailableFallbackModels(): string[] {
   // Priority order: FREE TIER (fast providers) → CHEAP PAID → EXPENSIVE
   const fallbackOrder = [
     // FREE tier providers with generous limits (fastest, most reliable)
-    { envVar: 'GROQ_API_KEY', model: 'groq:llama-3.3-70b-versatile' },
-    { envVar: 'CEREBRAS_API_KEY', model: 'cerebras:llama-3.3-70b' },
-    { envVar: 'NVIDIA_API_KEY', model: 'nvidia:meta/llama-3.1-70b-instruct' },
-    { envVar: 'SAMBANOVA_API_KEY', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
+    // Multi-key providers use getApiKeysForProvider for numbered key support
+    { providerId: 'groq', model: 'groq:llama-3.3-70b-versatile' },
+    { providerId: 'cerebras', model: 'cerebras:llama-3.3-70b' },
+    { providerId: 'nvidia', model: 'nvidia:meta/llama-3.1-70b-instruct' },
+    { providerId: 'sambanova', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
     // CHEAP paid models (fallback)
-    { envVar: 'GOOGLE_API_KEY', model: 'gemini-2.5-flash-preview-05-20' },
-    { envVar: 'MISTRAL_API_KEY', model: 'mistral-small-latest' },
-    { envVar: 'OPENROUTER_API_KEY', model: 'openrouter:openrouter/auto' },
+    { providerId: 'google', model: 'gemini-2.5-flash-preview-05-20' },
+    { providerId: 'mistral', model: 'mistral-small-latest' },
+    { providerId: 'openrouter', model: 'openrouter:openrouter/auto' },
     // EXPENSIVE models (last resort)
-    { envVar: 'ANTHROPIC_API_KEY', model: 'claude-sonnet-4-20250514' },
-    { envVar: 'OPENAI_API_KEY', model: 'gpt-5-mini' },
+    { providerId: 'anthropic', model: 'claude-sonnet-4-20250514' },
+    { providerId: 'openai', model: 'gpt-5-mini' },
   ];
   
   const seen = new Set<string>();
-  for (const { envVar, model } of fallbackOrder) {
-    if (process.env[envVar] && !seen.has(model)) {
+  for (const { providerId, model } of fallbackOrder) {
+    // Use getApiKeysForProvider to check for multi-key support
+    const keys = getApiKeysForProvider(providerId);
+    if (keys.length > 0 && !seen.has(model)) {
       fallbacks.push(model);
       seen.add(model);
+      
+      // Log multi-key status for debugging
+      if (keys.length > 1) {
+        logger.debug(`[LLM] ${providerId} has ${keys.length} API keys configured for rotation`);
+      }
     }
   }
   
@@ -55,6 +65,49 @@ function getAvailableFallbackModels(): string[] {
 // Track which providers have had billing errors (circuit breaker)
 const providerBillingErrors: Map<string, number> = new Map();
 const BILLING_ERROR_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
+// Track per-key state for multi-key providers
+interface KeyState {
+  cooldownUntil?: number;
+  lastError?: string;
+}
+const keyStates: Map<string, KeyState> = new Map();
+const KEY_COOLDOWN_MS = 60 * 1000; // 1 minute per-key cooldown
+
+function getKeyStateId(providerId: string, keyIndex: number): string {
+  return `${providerId}:${keyIndex}`;
+}
+
+function markKeyRateLimited(providerId: string, keyIndex: number): void {
+  const id = getKeyStateId(providerId, keyIndex);
+  keyStates.set(id, {
+    cooldownUntil: Date.now() + KEY_COOLDOWN_MS,
+    lastError: 'rate_limited',
+  });
+  logger.info(`[LLM] Key ${keyIndex} for ${providerId} rate limited, will try next key`);
+}
+
+function isKeyAvailable(providerId: string, keyIndex: number): boolean {
+  const id = getKeyStateId(providerId, keyIndex);
+  const state = keyStates.get(id);
+  if (!state?.cooldownUntil) return true;
+  
+  if (Date.now() >= state.cooldownUntil) {
+    keyStates.delete(id);
+    return true;
+  }
+  return false;
+}
+
+function getAvailableKeyIndex(providerId: string): number {
+  const keys = getApiKeysForProvider(providerId);
+  for (let i = 0; i < keys.length; i++) {
+    if (isKeyAvailable(providerId, i)) {
+      return i;
+    }
+  }
+  return 0; // Fallback to first key
+}
 
 function markProviderBillingError(providerId: string): void {
   providerBillingErrors.set(providerId, Date.now());
@@ -84,22 +137,33 @@ export function getProviderStatus(): Array<{
   hasApiKey: boolean;
   inCooldown: boolean;
   cooldownRemainingMs?: number;
+  numKeys?: number;
+  availableKeys?: number;
 }> {
   return PROVIDERS.map(provider => {
-    const hasApiKey = provider.apiKeyEnvVar ? !!process.env[provider.apiKeyEnvVar] : true;
+    const keys = getApiKeysForProvider(provider.id);
+    const hasApiKey = keys.length > 0;
     const errorTime = providerBillingErrors.get(provider.id);
     const inCooldown = isProviderInCooldown(provider.id);
     const cooldownRemainingMs = errorTime && inCooldown 
       ? BILLING_ERROR_COOLDOWN_MS - (Date.now() - errorTime)
       : undefined;
     
+    // Count available keys for multi-key providers
+    let availableKeys = keys.length;
+    if (keys.length > 1) {
+      availableKeys = keys.filter((_, i) => isKeyAvailable(provider.id, i)).length;
+    }
+    
     return {
       id: provider.id,
       name: provider.displayName,
-      available: hasApiKey && !inCooldown,
+      available: hasApiKey && !inCooldown && availableKeys > 0,
       hasApiKey,
       inCooldown,
       cooldownRemainingMs,
+      numKeys: keys.length > 1 ? keys.length : undefined,
+      availableKeys: keys.length > 1 ? availableKeys : undefined,
     };
   });
 }
@@ -125,8 +189,11 @@ export function getFastModel(modelProvider: string, fallbackModel: string): stri
   return getProviderById(modelProvider)?.fastModel ?? fallbackModel;
 }
 
-// Generic retry helper with exponential backoff
+// Generic retry helper with exponential backoff and multi-key support
 async function withRetry<T>(fn: () => Promise<T>, provider: string, maxAttempts = 3): Promise<T> {
+  const providerDef = PROVIDERS.find(p => p.displayName === provider);
+  const providerId = providerDef?.id;
+  
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await fn();
@@ -135,9 +202,25 @@ async function withRetry<T>(fn: () => Promise<T>, provider: string, maxAttempts 
       const errorType = classifyError(message);
       logger.error(`[${provider} API] ${errorType} error (attempt ${attempt + 1}/${maxAttempts}): ${message}`);
 
+      // For multi-key providers, mark current key as rate-limited before trying next
+      if (providerId && isRateLimitError(message)) {
+        const keys = getApiKeysForProvider(providerId);
+        if (keys.length > 1) {
+          const currentKeyIndex = getAvailableKeyIndex(providerId);
+          markKeyRateLimited(providerId, currentKeyIndex);
+          
+          // Check if there are more keys available
+          const nextKeyIndex = getAvailableKeyIndex(providerId);
+          if (nextKeyIndex !== currentKeyIndex) {
+            logger.info(`[LLM] Rotating to key ${nextKeyIndex + 1}/${keys.length} for ${providerId}`);
+            // Don't count this as an attempt, retry immediately with new key
+            continue;
+          }
+        }
+      }
+
       // Mark billing errors for circuit breaker
       if (isBillingError(message) || isRateLimitError(message)) {
-        const providerDef = PROVIDERS.find(p => p.displayName === provider);
         if (providerDef) {
           markProviderBillingError(providerDef.id);
         }
@@ -169,6 +252,27 @@ function getApiKey(envVar: string): string {
     throw new Error(`[LLM] ${envVar} not found in environment variables`);
   }
   return apiKey;
+}
+
+/**
+ * Get API key for a provider, supporting multi-key rotation.
+ * For multi-key providers (Groq, Cerebras), rotates through available keys.
+ */
+function getApiKeyForProvider(providerId: string): string {
+  const keys = getApiKeysForProvider(providerId);
+  if (keys.length === 0) {
+    const provider = getProviderById(providerId);
+    throw new Error(`[LLM] No API keys found for ${providerId} (${provider?.apiKeyEnvVar})`);
+  }
+  
+  // For multi-key providers, get the next available key
+  if (keys.length > 1) {
+    const keyIndex = getAvailableKeyIndex(providerId);
+    logger.debug(`[LLM] Using key ${keyIndex + 1}/${keys.length} for ${providerId}`);
+    return keys[keyIndex];
+  }
+  
+  return keys[0];
 }
 
 // Factories keyed by provider id — prefix routing is handled by resolveProvider()
@@ -225,7 +329,7 @@ const MODEL_FACTORIES: Record<string, ModelFactory> = {
     new ChatOpenAI({
       model: name.replace(/^groq:/, ''),
       ...opts,
-      apiKey: getApiKey('GROQ_API_KEY'),
+      apiKey: getApiKeyForProvider('groq'),
       configuration: {
         baseURL: 'https://api.groq.com/openai/v1',
       },
@@ -243,7 +347,7 @@ const MODEL_FACTORIES: Record<string, ModelFactory> = {
     new ChatOpenAI({
       model: name.replace(/^cerebras:/, ''),
       ...opts,
-      apiKey: getApiKey('CEREBRAS_API_KEY'),
+      apiKey: getApiKeyForProvider('cerebras'),
       configuration: {
         baseURL: 'https://api.cerebras.ai/v1',
       },

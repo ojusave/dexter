@@ -14,6 +14,8 @@ export interface ProviderDef {
   apiKeyEnvVar?: string;
   /** Fast model variant for lightweight tasks like summarization. */
   fastModel?: string;
+  /** Whether this provider supports multiple API keys for rate limit rotation */
+  supportsMultiKey?: boolean;
 }
 
 export const PROVIDERS: ProviderDef[] = [
@@ -65,6 +67,7 @@ export const PROVIDERS: ProviderDef[] = [
     modelPrefix: 'groq:',
     apiKeyEnvVar: 'GROQ_API_KEY',
     fastModel: 'groq:meta-llama/llama-4-scout-17b-16e-instruct',
+    supportsMultiKey: true,
   },
   {
     id: 'mistral',
@@ -79,6 +82,7 @@ export const PROVIDERS: ProviderDef[] = [
     modelPrefix: 'cerebras:',
     apiKeyEnvVar: 'CEREBRAS_API_KEY',
     fastModel: 'cerebras:llama3.1-8b',
+    supportsMultiKey: true,
   },
   {
     id: 'sambanova',
@@ -126,4 +130,31 @@ export function resolveProvider(modelName: string): ProviderDef {
  */
 export function getProviderById(id: string): ProviderDef | undefined {
   return PROVIDERS.find((p) => p.id === id);
+}
+
+/**
+ * Get all API keys for a provider that supports multi-key rotation.
+ * For providers like Groq and Cerebras, supports comma-separated keys:
+ * GROQ_API_KEY=key1,key2,key3
+ */
+export function getApiKeysForProvider(providerId: string): string[] {
+  const provider = getProviderById(providerId);
+  if (!provider?.apiKeyEnvVar) return [];
+  
+  const envValue = process.env[provider.apiKeyEnvVar];
+  if (!envValue || !envValue.trim()) return [];
+  
+  // Split by comma for multi-key support
+  if (provider.supportsMultiKey && envValue.includes(',')) {
+    return envValue.split(',').map(k => k.trim()).filter(k => k.length > 0);
+  }
+  
+  return [envValue.trim()];
+}
+
+/**
+ * Check if a provider has any API keys configured.
+ */
+export function hasApiKeyForProvider(providerId: string): boolean {
+  return getApiKeysForProvider(providerId).length > 0;
 }
