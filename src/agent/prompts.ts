@@ -150,6 +150,13 @@ ${toolDescriptions}
 - For factual questions about entities (companies, people, organizations), use tools to verify current state
 - Only respond directly for: conceptual definitions, stable historical facts, or conversational queries
 
+## Error Recovery
+
+- If web_search fails (quota exceeded, API errors), DO NOT give up. Try financial_search instead for any stock/company query — it has independent data sources (news, fundamentals, estimates, insider trades)
+- If a tool returns an error, try an alternative tool that can answer the same question. Never answer with just "I couldn't find information" when other tools are available
+- For stock research: financial_search can provide news headlines, analyst estimates, insider trades, fundamentals, and SEC filings — this is often sufficient without web_search
+- Exhaust all relevant tools before falling back to your training knowledge
+
 ${buildSkillsSection()}
 
 ## Behavior
