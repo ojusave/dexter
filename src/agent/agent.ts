@@ -17,6 +17,7 @@ const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
 const MAX_ITERATIONS = 500;  // High safety limit - agent should finish naturally
 const MAX_OVERFLOW_RETRIES = 5;  // More retries for context overflow
 const OVERFLOW_KEEP_TOOL_USES = 5;  // Keep more tool results on overflow
+const MAX_MALFORMED_RETRIES = 2;  // Max retries for malformed tool call responses
 
 /**
  * The core agent class that handles the agent loop and tool execution.
@@ -130,7 +131,23 @@ export class Agent {
 
       // No tool calls = final answer is in this response
       if (typeof response === 'string' || !hasToolCalls(response)) {
-        yield* this.handleDirectResponse(responseText ?? '', ctx);
+        const text = responseText ?? '';
+
+        // Detect when the model outputs tool call syntax as text instead of
+        // using the structured tool_calls mechanism. Re-prompt to get a real answer.
+        if (this.looksLikeMalformedToolCall(text) && ctx.malformedRetries < MAX_MALFORMED_RETRIES) {
+          ctx.malformedRetries++;
+          currentPrompt = buildIterationPrompt(
+            query,
+            ctx.scratchpad.getToolResults(),
+            'IMPORTANT: Your last response contained tool call syntax as plain text. ' +
+            'Do NOT write tool names or function calls in your response. ' +
+            'Based on the data you have already gathered, write your final answer directly as plain text.'
+          );
+          continue;
+        }
+
+        yield* this.handleDirectResponse(text, ctx);
         return;
       }
 
@@ -221,6 +238,23 @@ export class Agent {
         yield { type: 'context_cleared', clearedCount, keptCount: KEEP_TOOL_USES };
       }
     }
+  }
+
+  /**
+   * Detect if a response looks like a malformed tool call (text instead of structured).
+   * Models sometimes output "### financial_search(query=...)" as text.
+   */
+  private looksLikeMalformedToolCall(text: string): boolean {
+    if (!text) return false;
+    const trimmed = text.trim();
+    // Match patterns like "### tool_name(..." or "tool_name(query=..."
+    for (const tool of this.tools) {
+      const name = tool.name;
+      if (trimmed.startsWith(`### ${name}(`) || trimmed.startsWith(`${name}(`)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

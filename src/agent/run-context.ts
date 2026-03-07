@@ -10,6 +10,8 @@ export interface RunContext {
   readonly tokenCounter: TokenCounter;
   readonly startTime: number;
   iteration: number;
+  /** Tracks retries for malformed tool call responses (text instead of structured) */
+  malformedRetries: number;
 }
 
 export function createRunContext(query: string): RunContext {
@@ -19,5 +21,6 @@ export function createRunContext(query: string): RunContext {
     tokenCounter: new TokenCounter(),
     startTime: Date.now(),
     iteration: 0,
+    malformedRetries: 0,
   };
 }
