@@ -35,8 +35,11 @@ function getAvailableFallbackModels(): string[] {
     { providerId: 'cerebras', model: 'cerebras:llama-3.3-70b' },
     { providerId: 'nvidia', model: 'nvidia:meta/llama-3.1-70b-instruct' },
     { providerId: 'sambanova', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
-    // CHEAP paid models (fallback)
-    { providerId: 'google', model: 'gemini-2.5-flash-preview-05-20' },
+    // Google: per-model rate limits, combined 35 RPM / 560 RPD on free tier
+    { providerId: 'google', model: 'gemini-3.1-flash-lite' },     // 15 RPM, 500 RPD - bulk workhorse
+    { providerId: 'google', model: 'gemini-2.5-flash-lite' },     // 10 RPM, 20 RPD
+    { providerId: 'google', model: 'gemini-2.5-flash' },          // 5 RPM, 20 RPD
+    { providerId: 'google', model: 'gemini-3-flash-preview' },    // 5 RPM, 20 RPD
     { providerId: 'mistral', model: 'mistral-small-latest' },
     { providerId: 'openrouter', model: 'openrouter:meta-llama/llama-3.3-70b-instruct' },
     // EXPENSIVE models (last resort)
@@ -62,9 +65,11 @@ function getAvailableFallbackModels(): string[] {
   return fallbacks;
 }
 
-// Track which providers have had billing errors (circuit breaker)
+// Track which providers/models have had billing or rate limit errors (circuit breaker)
+// Key is provider ID for billing errors, or "provider:model" for per-model rate limits
 const providerBillingErrors: Map<string, number> = new Map();
 const BILLING_ERROR_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const RATE_LIMIT_COOLDOWN_MS = 60 * 1000; // 1 minute for rate limits
 
 // Track per-key state for multi-key providers
 interface KeyState {
@@ -109,15 +114,33 @@ function getAvailableKeyIndex(providerId: string): number {
   return 0; // Fallback to first key
 }
 
-function markProviderBillingError(providerId: string): void {
+function markProviderBillingError(providerId: string, modelName?: string): void {
   providerBillingErrors.set(providerId, Date.now());
   logger.warn(`[LLM] Provider ${providerId} marked as having billing issues, will use fallback`);
+}
+
+function markModelRateLimited(providerId: string, modelName: string): void {
+  const key = `${providerId}:${modelName}`;
+  providerBillingErrors.set(key, Date.now());
+  logger.warn(`[LLM] Model ${modelName} rate limited (1min cooldown), will try next model`);
+}
+
+function isModelInCooldown(providerId: string, modelName: string): boolean {
+  const key = `${providerId}:${modelName}`;
+  const errorTime = providerBillingErrors.get(key);
+  if (!errorTime) return false;
+  const elapsed = Date.now() - errorTime;
+  if (elapsed > RATE_LIMIT_COOLDOWN_MS) {
+    providerBillingErrors.delete(key);
+    return false;
+  }
+  return true;
 }
 
 function isProviderInCooldown(providerId: string): boolean {
   const errorTime = providerBillingErrors.get(providerId);
   if (!errorTime) return false;
-  
+
   const elapsed = Date.now() - errorTime;
   if (elapsed > BILLING_ERROR_COOLDOWN_MS) {
     providerBillingErrors.delete(providerId);
@@ -505,20 +528,21 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
   const modelsToTry: string[] = [];
   const primaryProvider = resolveProvider(model);
   
-  // Skip primary if it's in cooldown due to billing errors
-  if (!isProviderInCooldown(primaryProvider.id)) {
+  // Skip primary if provider has billing issues or this specific model is rate-limited
+  if (!isProviderInCooldown(primaryProvider.id) && !isModelInCooldown(primaryProvider.id, model)) {
     modelsToTry.push(model);
   } else {
-    logger.info(`[LLM] Skipping ${primaryProvider.displayName} (in billing cooldown), using fallback`);
+    logger.info(`[LLM] Skipping ${primaryProvider.displayName} ${model} (in cooldown), using fallback`);
   }
-  
-  // Add fallbacks that aren't the same provider as primary
+
+  // Add fallbacks — allow same-provider models (e.g. multiple Google models) but skip duplicates
   const fallbacks = getAvailableFallbackModels();
   for (const fallbackModel of fallbacks) {
     const fallbackProvider = resolveProvider(fallbackModel);
-    if (fallbackProvider.id !== primaryProvider.id && !isProviderInCooldown(fallbackProvider.id)) {
-      modelsToTry.push(fallbackModel);
-    }
+    if (isProviderInCooldown(fallbackProvider.id)) continue;
+    if (isModelInCooldown(fallbackProvider.id, fallbackModel)) continue;
+    if (fallbackModel === model) continue; // skip exact duplicate of primary
+    modelsToTry.push(fallbackModel);
   }
 
   if (modelsToTry.length === 0) {
@@ -564,13 +588,16 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
       lastError = e instanceof Error ? e : new Error(message);
 
       // If it's a billing/rate limit error and we have more fallbacks, continue
-      if (isBillingError(message) || isRateLimitError(message)) {
+      if (isBillingError(message)) {
         markProviderBillingError(currentProvider.id);
-        
-        if (i < modelsToTry.length - 1) {
-          logger.warn(`[LLM] ${currentProvider.displayName} billing/rate limit error, trying next fallback...`);
-          continue;
-        }
+      } else if (isRateLimitError(message)) {
+        // Per-model cooldown for rate limits (don't block other models from same provider)
+        markModelRateLimited(currentProvider.id, currentModel);
+      }
+
+      if ((isBillingError(message) || isRateLimitError(message)) && i < modelsToTry.length - 1) {
+        logger.warn(`[LLM] ${currentProvider.displayName} (${currentModel}) error, trying next fallback...`);
+        continue;
       }
 
       // For non-billing errors or if this is the last fallback, throw
