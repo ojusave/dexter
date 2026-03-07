@@ -38,7 +38,7 @@ function getAvailableFallbackModels(): string[] {
     // CHEAP paid models (fallback)
     { providerId: 'google', model: 'gemini-2.5-flash-preview-05-20' },
     { providerId: 'mistral', model: 'mistral-small-latest' },
-    { providerId: 'openrouter', model: 'openrouter:openrouter/auto' },
+    { providerId: 'openrouter', model: 'openrouter:meta-llama/llama-3.3-70b-instruct' },
     // EXPENSIVE models (last resort)
     { providerId: 'anthropic', model: 'claude-sonnet-4-20250514' },
     { providerId: 'openai', model: 'gpt-5-mini' },
@@ -302,7 +302,7 @@ const MODEL_FACTORIES: Record<string, ModelFactory> = {
     new ChatOpenAI({
       model: name.replace(/^openrouter:/, ''),
       ...opts,
-      apiKey: getApiKey('OPENROUTER_API_KEY'),
+      apiKey: getApiKeyForProvider('openrouter'),
       configuration: {
         baseURL: 'https://openrouter.ai/api/v1',
       },

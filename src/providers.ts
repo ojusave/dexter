@@ -103,7 +103,8 @@ export const PROVIDERS: ProviderDef[] = [
     displayName: 'OpenRouter',
     modelPrefix: 'openrouter:',
     apiKeyEnvVar: 'OPENROUTER_API_KEY',
-    fastModel: 'openrouter:openrouter/auto',
+    fastModel: 'openrouter:meta-llama/llama-3.3-70b-instruct',
+    supportsMultiKey: true,
   },
   {
     id: 'ollama',
@@ -134,22 +135,30 @@ export function getProviderById(id: string): ProviderDef | undefined {
 
 /**
  * Get all API keys for a provider that supports multi-key rotation.
- * For providers like Groq and Cerebras, supports comma-separated keys:
- * GROQ_API_KEY=key1,key2,key3
+ * Supports: comma-separated (KEY=key1,key2) or numbered vars (KEY, KEY_2, KEY_3).
  */
 export function getApiKeysForProvider(providerId: string): string[] {
   const provider = getProviderById(providerId);
   if (!provider?.apiKeyEnvVar) return [];
   
-  const envValue = process.env[provider.apiKeyEnvVar];
-  if (!envValue || !envValue.trim()) return [];
+  const baseVar = provider.apiKeyEnvVar;
+  const envValue = process.env[baseVar] ?? '';
+  const raw = envValue.trim();
   
-  // Split by comma for multi-key support
-  if (provider.supportsMultiKey && envValue.includes(',')) {
-    return envValue.split(',').map(k => k.trim()).filter(k => k.length > 0);
+  if (!raw) return [];
+  
+  if (provider.supportsMultiKey && raw.includes(',')) {
+    return raw.split(',').map(k => k.trim()).filter(k => k.length > 0);
   }
   
-  return [envValue.trim()];
+  const keys: string[] = [raw];
+  if (provider.supportsMultiKey) {
+    for (let i = 2; i <= 5; i++) {
+      const v = (process.env[`${baseVar}_${i}`] ?? '').trim();
+      if (v) keys.push(v);
+    }
+  }
+  return keys;
 }
 
 /**
