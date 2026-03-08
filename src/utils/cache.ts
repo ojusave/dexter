@@ -127,7 +127,8 @@ function removeCacheFile(filepath: string): void {
  */
 export function readCache(
   endpoint: string,
-  params: Record<string, string | number | string[] | undefined>
+  params: Record<string, string | number | string[] | undefined>,
+  options?: { ttlMs?: number }
 ): { data: Record<string, unknown>; url: string } | null {
   const cacheKey = buildCacheKey(endpoint, params);
   const filepath = join(CACHE_DIR, cacheKey);
@@ -146,6 +147,15 @@ export function readCache(
       logger.warn(`Cache corrupted (invalid structure): ${label}`, { filepath });
       removeCacheFile(filepath);
       return null;
+    }
+
+    // TTL check: if a TTL is specified, expire stale entries
+    if (options?.ttlMs) {
+      const cachedTime = new Date(parsed.cachedAt).getTime();
+      if (Date.now() - cachedTime > options.ttlMs) {
+        removeCacheFile(filepath);
+        return null;
+      }
     }
 
     return { data: parsed.data, url: parsed.url };

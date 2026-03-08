@@ -43,13 +43,13 @@ export function stripFieldsDeep(value: unknown, fields: readonly string[]): unkn
 export async function callApi(
   endpoint: string,
   params: Record<string, string | number | string[] | undefined>,
-  options?: { cacheable?: boolean }
+  options?: { cacheable?: boolean; ttlMs?: number }
 ): Promise<ApiResponse> {
   const label = describeRequest(endpoint, params);
 
   // Check local cache first — avoids redundant network calls for immutable data
   if (options?.cacheable) {
-    const cached = readCache(endpoint, params);
+    const cached = readCache(endpoint, params, { ttlMs: options.ttlMs });
     if (cached) {
       return cached;
     }

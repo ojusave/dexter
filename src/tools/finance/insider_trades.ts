@@ -49,7 +49,10 @@ export const getInsiderTrades = new DynamicStructuredTool({
       filing_date_gt: input.filing_date_gt,
       filing_date_lt: input.filing_date_lt,
     };
-    const { data, url } = await callApi('/insider-trades/', params);
+    const { data, url } = await callApi('/insider-trades/', params, {
+      cacheable: true,
+      ttlMs: 24 * 60 * 60 * 1000, // 24 hours
+    });
     return formatToolResult(
       stripFieldsDeep(data.insider_trades || [], REDUNDANT_INSIDER_FIELDS),
       [url]
