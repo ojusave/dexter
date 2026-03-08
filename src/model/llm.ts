@@ -37,7 +37,7 @@ function getAvailableFallbackModels(): string[] {
     { providerId: 'nvidia', model: 'nvidia:meta/llama-3.1-70b-instruct' },
     { providerId: 'sambanova', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
     // Google: per-model rate limits, combined 35 RPM / 560 RPD on free tier
-    { providerId: 'google', model: 'gemini-3.1-flash-lite' },     // 15 RPM, 500 RPD - bulk workhorse
+    // gemini-3.1-flash-lite removed (Google 404 - model does not exist)
     { providerId: 'google', model: 'gemini-2.5-flash-lite' },     // 10 RPM, 20 RPD
     { providerId: 'google', model: 'gemini-2.5-flash' },          // 5 RPM, 20 RPD
     { providerId: 'google', model: 'gemini-3-flash-preview' },    // 5 RPM, 20 RPD

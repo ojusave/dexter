@@ -199,17 +199,26 @@ const PROVIDER_RPM: Record<string, { category: string; rpm: number; rpd: number 
   anthropic: { category: 'openai', rpm: 60, rpd: 10000 }, // no shared limit tracked
 };
 
-// Google per-model categories
-const GOOGLE_MODEL_CATEGORIES: Record<string, { category: string; rpm: number; rpd: number }> = {
-  'gemini-3.1-flash-lite': { category: 'google_flash_lite_31', rpm: 15, rpd: 500 },
+// Per-model categories for providers with independent rate limit buckets
+const MODEL_CATEGORIES: Record<string, { category: string; rpm: number; rpd: number }> = {
+  // Groq: each model has independent rate limits!
+  'llama-3.3-70b-versatile': { category: 'groq_llama33_70b', rpm: 30, rpd: 1000 },
+  'meta-llama/llama-4-scout-17b': { category: 'groq_llama4_scout', rpm: 30, rpd: 1000 },
+  'meta-llama/llama-4-maverick-17b': { category: 'groq_llama4_maverick', rpm: 30, rpd: 1000 },
+  'qwen/qwen3-32b': { category: 'groq_qwen3_32b', rpm: 60, rpd: 1000 },
+  'moonshotai/kimi-k2-instruct': { category: 'groq_kimi_k2', rpm: 60, rpd: 1000 },
+  'openai/gpt-oss-120b': { category: 'groq_gpt_oss_120b', rpm: 30, rpd: 1000 },
+  'llama-3.1-8b-instant': { category: 'groq_llama31_8b', rpm: 30, rpd: 14400 },
+  // Google: per-model categories
   'gemini-2.5-flash-lite': { category: 'google_flash_lite_25', rpm: 10, rpd: 20 },
   'gemini-2.5-flash': { category: 'google_flash_25', rpm: 5, rpd: 20 },
   'gemini-3-flash-preview': { category: 'google_flash_3', rpm: 5, rpd: 20 },
 };
 
 function getCategoryForModel(providerId: string, modelName: string): { category: string; rpm: number; rpd: number } | null {
-  if (providerId === 'google') {
-    return GOOGLE_MODEL_CATEGORIES[modelName] || PROVIDER_RPM.google;
+  // Check per-model categories first (Groq, Google have independent buckets)
+  if (MODEL_CATEGORIES[modelName]) {
+    return MODEL_CATEGORIES[modelName];
   }
   return PROVIDER_RPM[providerId] || null;
 }
