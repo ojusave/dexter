@@ -14,6 +14,7 @@ import type { TokenUsage } from '@/agent/types';
 import { logger } from '@/utils';
 import { classifyError, isNonRetryableError, isBillingError, isRateLimitError } from '@/utils/errors';
 import { resolveProvider, getProviderById, getApiKeysForProvider, PROVIDERS } from '@/providers';
+import { checkSharedRateLimit } from '@/utils/shared-rate-limit';
 
 export const DEFAULT_PROVIDER = 'groq';
 export const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
@@ -558,6 +559,14 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
 
     if (isRetry) {
       logger.info(`[LLM] Falling back to ${currentProvider.displayName} (${currentModel})`);
+    }
+
+    // Check shared Redis rate limit (cross-service: stock-analyzer + Dexter)
+    const sharedAllowed = await checkSharedRateLimit(currentProvider.id, currentModel);
+    if (!sharedAllowed) {
+      logger.info(`[LLM] Shared rate limit reached for ${currentProvider.displayName} (${currentModel}), trying next`);
+      markModelRateLimited(currentProvider.id, currentModel);
+      continue;
     }
 
     try {
