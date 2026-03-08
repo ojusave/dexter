@@ -197,6 +197,7 @@ const PROVIDER_RPM: Record<string, { category: string; rpm: number; rpd: number 
   deepseek: { category: 'deepseek', rpm: 60, rpd: 10000 },
   openai: { category: 'openai', rpm: 60, rpd: 10000 },
   anthropic: { category: 'openai', rpm: 60, rpd: 10000 }, // no shared limit tracked
+  tavily: { category: 'tavily', rpm: 10, rpd: 33 }, // 1000/month free tier ≈ 33/day
 };
 
 // Per-model categories for providers with independent rate limit buckets.
@@ -268,6 +269,50 @@ export async function checkSharedRateLimit(providerId: string, modelName: string
     logger.debug(`[SharedRateLimit] Redis error (fail-open): ${e}`);
     return true;
   }
+}
+
+// In-memory fallback counters for when Redis is unavailable
+const memoryCounters: Record<string, { count: number; resetAt: number }> = {};
+
+function checkMemoryRateLimit(category: string, rpd: number): boolean {
+  const dayKey = `rpd:${category}:${dayBucket()}`;
+  const entry = memoryCounters[dayKey];
+  const now = Date.now();
+
+  if (!entry || now > entry.resetAt) {
+    // New day bucket — reset at end of current UTC day
+    const endOfDay = new Date();
+    endOfDay.setUTCHours(23, 59, 59, 999);
+    memoryCounters[dayKey] = { count: 1, resetAt: endOfDay.getTime() };
+    return true;
+  }
+
+  if (entry.count >= rpd) {
+    logger.warn(`[SharedRateLimit] In-memory RPD limit (${rpd}) reached for ${category} (${entry.count} used)`);
+    return false;
+  }
+
+  entry.count++;
+  return true;
+}
+
+/**
+ * Check rate limit for a search provider (e.g. Tavily).
+ * Uses Redis if available, falls back to in-memory counters.
+ * Returns true if allowed, false if rate limited.
+ */
+export async function checkSearchRateLimit(provider: string): Promise<boolean> {
+  const limits = PROVIDER_RPM[provider];
+  if (!limits) return true;
+
+  const redis = getRedis();
+  if (!redis) {
+    // No Redis — use in-memory counter (per-instance, not shared)
+    return checkMemoryRateLimit(limits.category, limits.rpd);
+  }
+
+  // Use Redis (shared across services)
+  return checkSharedRateLimit(provider, provider);
 }
 
 /**

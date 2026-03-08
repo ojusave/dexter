@@ -11,6 +11,12 @@ import { exaSearch } from './exa.js';
 import { perplexitySearch } from './perplexity.js';
 import { tavilySearch } from './tavily.js';
 import { logger } from '../../utils/logger.js';
+import { checkSearchRateLimit } from '../../utils/shared-rate-limit.js';
+
+// Map provider names to rate limit keys (only for providers with strict limits)
+const RATE_LIMITED_PROVIDERS: Record<string, string> = {
+  'Tavily': 'tavily', // 1000/month free tier
+};
 
 interface SearchProvider {
   name: string;
@@ -59,6 +65,17 @@ export const fallbackSearch = new DynamicStructuredTool({
     const errors: string[] = [];
 
     for (const provider of configuredProviders) {
+      // Check rate limit for providers with strict quotas (e.g. Tavily 1000/month)
+      const rateLimitKey = RATE_LIMITED_PROVIDERS[provider.name];
+      if (rateLimitKey) {
+        const allowed = await checkSearchRateLimit(rateLimitKey);
+        if (!allowed) {
+          console.log(`[web_search] ${provider.name} skipped: daily rate limit reached (preserving monthly quota)`);
+          errors.push(`${provider.name}: daily rate limit reached`);
+          continue;
+        }
+      }
+
       try {
         console.log(`[web_search] Trying ${provider.name}...`);
         const result = await provider.tool.invoke({ query: input.query });
