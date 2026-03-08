@@ -33,7 +33,10 @@ function getAvailableFallbackModels(): string[] {
     // FREE tier providers with generous limits (fastest, most reliable)
     // Multi-key providers use getApiKeysForProvider for numbered key support
     { providerId: 'groq', model: 'groq:llama-3.3-70b-versatile' },
-    { providerId: 'cerebras', model: 'cerebras:llama-3.3-70b' },
+    // Cerebras: per-model independent limits (30 RPM, 14.4K RPD each)
+    { providerId: 'cerebras', model: 'cerebras:gpt-oss-120b' },
+    { providerId: 'cerebras', model: 'cerebras:llama3.1-8b' },
+    { providerId: 'cerebras', model: 'cerebras:qwen-3-235b-a22b-instruct-2507' },
     { providerId: 'nvidia', model: 'nvidia:meta/llama-3.1-70b-instruct' },
     { providerId: 'sambanova', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
     // Google: per-model rate limits, combined 35 RPM / 560 RPD on free tier

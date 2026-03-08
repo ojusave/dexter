@@ -199,26 +199,34 @@ const PROVIDER_RPM: Record<string, { category: string; rpm: number; rpd: number 
   anthropic: { category: 'openai', rpm: 60, rpd: 10000 }, // no shared limit tracked
 };
 
-// Per-model categories for providers with independent rate limit buckets
+// Per-model categories for providers with independent rate limit buckets.
+// Keys use "provider:model" format to handle same model name on different providers.
 const MODEL_CATEGORIES: Record<string, { category: string; rpm: number; rpd: number }> = {
   // Groq: each model has independent rate limits!
-  'llama-3.3-70b-versatile': { category: 'groq_llama33_70b', rpm: 30, rpd: 1000 },
-  'meta-llama/llama-4-scout-17b': { category: 'groq_llama4_scout', rpm: 30, rpd: 1000 },
-  'meta-llama/llama-4-maverick-17b': { category: 'groq_llama4_maverick', rpm: 30, rpd: 1000 },
-  'qwen/qwen3-32b': { category: 'groq_qwen3_32b', rpm: 60, rpd: 1000 },
-  'moonshotai/kimi-k2-instruct': { category: 'groq_kimi_k2', rpm: 60, rpd: 1000 },
-  'openai/gpt-oss-120b': { category: 'groq_gpt_oss_120b', rpm: 30, rpd: 1000 },
-  'llama-3.1-8b-instant': { category: 'groq_llama31_8b', rpm: 30, rpd: 14400 },
-  // Google: per-model categories
-  'gemini-2.5-flash-lite': { category: 'google_flash_lite_25', rpm: 10, rpd: 20 },
-  'gemini-2.5-flash': { category: 'google_flash_25', rpm: 5, rpd: 20 },
-  'gemini-3-flash-preview': { category: 'google_flash_3', rpm: 5, rpd: 20 },
+  'groq:llama-3.3-70b-versatile': { category: 'groq_llama33_70b', rpm: 30, rpd: 1000 },
+  'groq:meta-llama/llama-4-scout-17b': { category: 'groq_llama4_scout', rpm: 30, rpd: 1000 },
+  'groq:meta-llama/llama-4-maverick-17b': { category: 'groq_llama4_maverick', rpm: 30, rpd: 1000 },
+  'groq:qwen/qwen3-32b': { category: 'groq_qwen3_32b', rpm: 60, rpd: 1000 },
+  'groq:moonshotai/kimi-k2-instruct': { category: 'groq_kimi_k2', rpm: 60, rpd: 1000 },
+  'groq:openai/gpt-oss-120b': { category: 'groq_gpt_oss_120b', rpm: 30, rpd: 1000 },
+  'groq:llama-3.1-8b-instant': { category: 'groq_llama31_8b', rpm: 30, rpd: 14400 },
+  // Cerebras: each model has independent rate limits
+  'cerebras:gpt-oss-120b': { category: 'cerebras_gpt_oss_120b', rpm: 30, rpd: 14400 },
+  'cerebras:llama3.1-8b': { category: 'cerebras_llama31_8b', rpm: 30, rpd: 14400 },
+  'cerebras:qwen-3-235b-a22b-instruct-2507': { category: 'cerebras_qwen3_235b', rpm: 30, rpd: 14400 },
+  // Google: per-model (per-project, independent per model)
+  'google:gemini-2.5-flash-lite': { category: 'google_flash_lite_25', rpm: 10, rpd: 20 },
+  'google:gemini-2.5-flash': { category: 'google_flash_25', rpm: 5, rpd: 20 },
+  'google:gemini-3-flash-preview': { category: 'google_flash_3', rpm: 5, rpd: 20 },
 };
 
 function getCategoryForModel(providerId: string, modelName: string): { category: string; rpm: number; rpd: number } | null {
-  // Check per-model categories first (Groq, Google have independent buckets)
-  if (MODEL_CATEGORIES[modelName]) {
-    return MODEL_CATEGORIES[modelName];
+  // Strip provider prefix from model name if present (e.g. "cerebras:gpt-oss-120b" → "gpt-oss-120b")
+  const bareModel = modelName.includes(':') ? modelName.split(':').slice(1).join(':') : modelName;
+  // Check provider:model key first
+  const providerModelKey = `${providerId}:${bareModel}`;
+  if (MODEL_CATEGORIES[providerModelKey]) {
+    return MODEL_CATEGORIES[providerModelKey];
   }
   return PROVIDER_RPM[providerId] || null;
 }
