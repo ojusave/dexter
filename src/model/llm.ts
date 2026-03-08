@@ -14,10 +14,88 @@ import type { TokenUsage } from '@/agent/types';
 import { logger } from '@/utils';
 import { classifyError, isNonRetryableError, isBillingError, isRateLimitError } from '@/utils/errors';
 import { resolveProvider, getProviderById, getApiKeysForProvider, PROVIDERS } from '@/providers';
-import { checkSharedRateLimit } from '@/utils/shared-rate-limit';
+import { checkSharedRateLimit, getRedis } from '@/utils/shared-rate-limit';
 
 export const DEFAULT_PROVIDER = 'groq';
 export const DEFAULT_MODEL = 'groq:llama-3.3-70b-versatile';
+
+// --- Redis-based provider enable/disable config (shared with admin UI) ---
+
+interface ProviderConfig {
+  providers: Record<string, { enabled: boolean }>;
+  models: Record<string, { enabled: boolean }>;
+}
+
+const PROVIDER_CONFIG_KEY = 'llm:provider_config';
+const CONFIG_TTL_MS = 30_000; // 30 seconds
+
+let cachedConfig: ProviderConfig | null = null;
+let configLoadedAt = 0;
+
+/**
+ * Async refresh of the provider config from Redis.
+ * Caches the result for 30 seconds. On any error, clears cache (everything enabled).
+ */
+export async function refreshProviderConfig(): Promise<void> {
+  try {
+    const redis = getRedis();
+    if (!redis) return; // No Redis = everything enabled
+
+    const raw = await redis.get(PROVIDER_CONFIG_KEY);
+    if (!raw) {
+      cachedConfig = null;
+      configLoadedAt = Date.now();
+      return;
+    }
+
+    const parsed = JSON.parse(raw) as ProviderConfig;
+    cachedConfig = parsed;
+    configLoadedAt = Date.now();
+    logger.debug('[LLM] Refreshed provider config from Redis');
+  } catch (e) {
+    logger.debug(`[LLM] Failed to read provider config from Redis (fail-open): ${e}`);
+    cachedConfig = null;
+    configLoadedAt = Date.now();
+  }
+}
+
+/**
+ * Check if the cached config is stale and kick off a background refresh if needed.
+ */
+function ensureConfigFresh(): void {
+  if (Date.now() - configLoadedAt > CONFIG_TTL_MS) {
+    // Fire-and-forget refresh
+    refreshProviderConfig().catch(() => {});
+  }
+}
+
+/**
+ * Check if a provider is enabled in the admin config. Defaults to true.
+ */
+export function isProviderEnabled(providerId: string): boolean {
+  ensureConfigFresh();
+  if (!cachedConfig) return true;
+  const entry = cachedConfig.providers[providerId];
+  return entry === undefined ? true : entry.enabled;
+}
+
+/**
+ * Check if a specific model is enabled in the admin config.
+ * Uses key format "providerId:modelName" (e.g., "groq:llama-3.3-70b-versatile").
+ * Defaults to true.
+ */
+export function isModelEnabled(providerId: string, model: string): boolean {
+  ensureConfigFresh();
+  if (!cachedConfig) return true;
+  // The model string may already contain the provider prefix (e.g., "groq:llama-3.3-70b-versatile")
+  // or may not for some providers (e.g., "claude-sonnet-4-20250514").
+  // Try the full model string first, then "providerId:model" if different.
+  const entry = cachedConfig.models[model] ?? cachedConfig.models[`${providerId}:${model}`];
+  return entry === undefined ? true : entry.enabled;
+}
+
+// Kick off initial config load
+refreshProviderConfig().catch(() => {});
 
 /**
  * Fallback chain for when primary provider has billing/quota issues.
@@ -36,7 +114,6 @@ function getAvailableFallbackModels(): string[] {
     // Cerebras: per-model independent limits (30 RPM, 14.4K RPD each)
     { providerId: 'cerebras', model: 'cerebras:gpt-oss-120b' },
     { providerId: 'cerebras', model: 'cerebras:llama3.1-8b' },
-    { providerId: 'cerebras', model: 'cerebras:qwen-3-235b-a22b-instruct-2507' },
     { providerId: 'nvidia', model: 'nvidia:meta/llama-3.1-70b-instruct' },
     { providerId: 'sambanova', model: 'sambanova:Meta-Llama-3.3-70B-Instruct' },
     // Google: per-model rate limits, combined 35 RPM / 560 RPD on free tier
@@ -57,7 +134,7 @@ function getAvailableFallbackModels(): string[] {
   for (const { providerId, model } of fallbackOrder) {
     // Use getApiKeysForProvider to check for multi-key support
     const keys = getApiKeysForProvider(providerId);
-    if (keys.length > 0 && !seen.has(model)) {
+    if (keys.length > 0 && !seen.has(model) && isProviderEnabled(providerId) && isModelEnabled(providerId, model)) {
       fallbacks.push(model);
       seen.add(model);
       

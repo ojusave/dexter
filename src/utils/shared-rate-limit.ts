@@ -157,7 +157,7 @@ function createRedisClient(): SimpleRedis | null {
   };
 }
 
-function getRedis(): SimpleRedis | null {
+export function getRedis(): SimpleRedis | null {
   if (redisUnavailable) return null;
   if (!redisClient) {
     redisClient = createRedisClient();
