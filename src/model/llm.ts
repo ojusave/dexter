@@ -45,7 +45,7 @@ function getAvailableFallbackModels(): string[] {
     { providerId: 'google', model: 'gemini-2.5-flash' },          // 5 RPM, 20 RPD
     { providerId: 'google', model: 'gemini-3-flash-preview' },    // 5 RPM, 20 RPD
     { providerId: 'mistral', model: 'mistral-small-latest' },
-    { providerId: 'openrouter', model: 'openrouter:meta-llama/llama-3.3-70b-instruct' },
+    { providerId: 'openrouter', model: 'openrouter:meta-llama/llama-3.3-70b-instruct:free' },
     // CHEAP PAID (before expensive last-resort models)
     { providerId: 'deepseek', model: 'deepseek:deepseek-chat' },
     // EXPENSIVE models (last resort)
