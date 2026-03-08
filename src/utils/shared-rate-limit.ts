@@ -194,6 +194,7 @@ const PROVIDER_RPM: Record<string, { category: string; rpm: number; rpd: number 
   google: { category: 'google', rpm: 5, rpd: 20 },
   mistral: { category: 'mistral', rpm: 2, rpd: 200 },
   openrouter: { category: 'openrouter_free', rpm: 20, rpd: 200 },
+  deepseek: { category: 'deepseek', rpm: 60, rpd: 10000 },
   openai: { category: 'openai', rpm: 60, rpd: 10000 },
   anthropic: { category: 'openai', rpm: 60, rpd: 10000 }, // no shared limit tracked
 };
