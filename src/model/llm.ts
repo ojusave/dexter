@@ -411,6 +411,10 @@ const MODEL_FACTORIES: Record<string, ModelFactory> = {
       apiKey: getApiKeyForProvider('openrouter'),
       configuration: {
         baseURL: 'https://openrouter.ai/api/v1',
+        defaultHeaders: {
+          'HTTP-Referer': 'https://stock-analyzer.onrender.com',
+          'X-Title': 'Dexter Research',
+        },
       },
     }),
   moonshot: (name, opts) =>
